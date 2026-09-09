@@ -2,9 +2,8 @@ services:
   fazpos:
     build: .
     container_name: fazpos
-    environment:
-      - RUST_LOG=info
-      - SLINT_BACKEND=winit
+    ports:
+      - "8080:8080"
     volumes:
       - ./data:/app/data
     restart: unless-stopped
