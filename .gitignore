@@ -1,0 +1,12 @@
+/target
+*.key
+vendor_private.key
+vendor_public.key
+*.lic
+*.db
+*.db-wal
+*.db-shm
+struk_terakhir.bin
+backups/
+
+

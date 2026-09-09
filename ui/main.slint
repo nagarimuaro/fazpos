@@ -1,0 +1,444 @@
+﻿import { CartItemData, ProductGridData, PelangganGridData, TransactionGridData, TopProductData, LaporanMetricData, ReturGridData, SupplierGridData, PembelianGridData, HutangGridData, OpnameGridData, CashflowGridData } from "models.slint";
+import { KasirView } from "views/kasir_view.slint";
+import { BarangView } from "views/barang_view.slint";
+import { PelangganView } from "views/pelanggan_view.slint";
+import { RiwayatView } from "views/riwayat_view.slint";
+import { ShiftView } from "views/shift_view.slint";
+import { LaporanView } from "views/laporan_view.slint";
+import { PengaturanView } from "views/pengaturan_view.slint";
+import { ReturView } from "views/retur_view.slint";
+import { SupplierView } from "views/supplier_view.slint";
+import { PembelianView } from "views/pembelian_view.slint";
+import { HutangPiutangView } from "views/hutang_piutang_view.slint";
+import { StokOpnameView } from "views/stok_opname_view.slint";
+import { BukuKasView } from "views/buku_kas_view.slint";
+
+export { CartItemData, ProductGridData, PelangganGridData, TransactionGridData, TopProductData, LaporanMetricData, ReturGridData, SupplierGridData, PembelianGridData, HutangGridData, OpnameGridData, CashflowGridData }
+
+export component MainWindow inherits Window {
+    title: "FAZPOS — Sistem Kasir & Manajemen Toko Ritel Grosir";
+    min-width: 1280px;
+    min-height: 800px;
+    background: #f8fafc;
+    default-font-family: "Segoe UI, sans-serif";
+
+    // Navigasi Non-Tab (Sidebar Vertikal Profesional)
+    in-out property <int> active_view: 0;
+    // 0: Kasir POS, 1: Riwayat, 2: Retur, 3: Pembelian
+    // 4: Barang, 5: Pelanggan, 6: Supplier, 7: Stok Opname
+    // 8: Laporan, 9: Hutang & Piutang, 10: Buku Kas
+    // 11: Shift Kasir, 12: Pengaturan
+
+    // Identitas Toko & Status Header
+    in-out property <string> toko_nama: "Nama Ritel Grosir";
+    in-out property <string> operator_nama: "Operator : Master";
+    in-out property <string> shift_status: "SHIFT AKTIF";
+    in-out property <string> status_pesan: "Sistem siap digunakan.";
+
+    // Data Properties untuk Tiap Modul
+    in-out property <string> input_barcode: "";
+    in-out property <[CartItemData]> cart_items: [];
+    in-out property <float> total_belanja: 0.0;
+    in-out property <float> bayar_tunai: 0.0;
+    in-out property <float> kembalian: 0.0;
+
+    in-out property <[ProductGridData]> products: [];
+    in-out property <string> filter_barang: "";
+    in-out property <int> total_item_barang: 0;
+    in-out property <float> total_nilai_beli: 0.0;
+    in-out property <float> total_nilai_jual: 0.0;
+
+    in-out property <[PelangganGridData]> pelanggan_items: [];
+    in-out property <[SupplierGridData]> supplier_items: [];
+    in-out property <[OpnameGridData]> opname_items: [];
+    in-out property <[TransactionGridData]> history_items: [];
+    in-out property <float> total_omzet_riwayat: 0.0;
+    in-out property <[ReturGridData]> retur_items: [];
+    in-out property <[PembelianGridData]> pembelian_items: [];
+
+    in-out property <float> shift_modal_awal: 100000.0;
+    in-out property <float> shift_tunai: 0.0;
+    in-out property <float> shift_nontunai: 0.0;
+    in-out property <float> shift_retur: 0.0;
+    in-out property <float> shift_uang_seharusnya: 100000.0;
+    in-out property <string> shift_catatan: "";
+
+    in-out property <[LaporanMetricData]> laporan_metrics: [];
+    in-out property <[TopProductData]> top_products: [];
+
+    in-out property <[HutangGridData]> hutang_items: [];
+    in-out property <[HutangGridData]> piutang_items: [];
+
+    in-out property <[CashflowGridData]> cashflow_items: [];
+    in-out property <float> kas_total_masuk: 0.0;
+    in-out property <float> kas_total_keluar: 0.0;
+    in-out property <float> kas_saldo: 0.0;
+
+    in-out property <string> input_sql_dump: "";
+    in-out property <string> import_summary: "Tempel query dump INSERT SQL dari iB Retago 5, lalu klik Proses Import.";
+
+    in-out property <string> machine_id: "RTG-XXXX-XXXX-XXXX-XXXX";
+    in-out property <string> input_license_token: "";
+    in-out property <string> license_status_text: "BELUM AKTIVASI";
+    in-out property <string> license_toko: "-";
+
+    // Callbacks Navigasi & Bisnis
+    callback navigasi(int);
+    callback cari_barcode(string);
+    callback ubah_qty_kasir(int, float);
+    callback hapus_item_kasir(int);
+    callback proses_bayar(float);
+    callback reset_transaksi();
+    callback cari_barang(string);
+    callback simpan_barang_baru(string, string, string, string, string, float, float, float);
+    callback hapus_barang(string);
+    callback cari_pelanggan(string);
+    callback cetak_struk_riwayat(string);
+    callback refresh_riwayat();
+    callback tutup_shift_kasir();
+    callback buka_shift_baru(float);
+    callback refresh_laporan();
+    callback aktivasi_lisensi(string);
+    callback jalankan_import_sql(string);
+    callback buat_backup_db();
+
+    callback proses_retur_penjualan(string, string, float);
+    callback refresh_retur_penjualan();
+    callback simpan_transaksi_pembelian(string, string, float, float, float, string);
+    callback refresh_transaksi_pembelian();
+    callback tambah_supplier_baru(string, string, string, string, string);
+    callback hapus_supplier_id(string);
+    callback refresh_data_supplier();
+    callback proses_stok_opname(string, float, string);
+    callback refresh_stok_opname();
+    callback bayar_cicilan_hutang(string, float);
+    callback bayar_cicilan_piutang(string, float);
+    callback refresh_hutang_piutang();
+    callback catat_arus_kas_biaya(string, string, float, string);
+    callback refresh_buku_kas();
+
+    VerticalLayout {
+        padding: 0px;
+        spacing: 0px;
+
+        // =========================================================================
+        // TOP HEADER BAR (Light Theme, Clean & Professional)
+        // =========================================================================
+        Rectangle {
+            height: 46px;
+            background: #ffffff;
+            border-width: 1px;
+            border-color: #e2e8f0;
+
+            HorizontalLayout {
+                padding-left: 16px;
+                padding-right: 16px;
+                alignment: space-between;
+
+                // Brand & Title
+                HorizontalLayout {
+                    spacing: 12px;
+                    alignment: start;
+                    Text { text: "FAZPOS"; font-size: 16px; font-weight: 900; color: #0284c7; vertical-alignment: center; }
+                    Rectangle { width: 1px; height: 18px; background: #cbd5e1; }
+                    Text {
+                        text: root.active_view == 0 ? "Penjualan Kasir (POS)" :
+                              root.active_view == 1 ? "Riwayat Transaksi Penjualan" :
+                              root.active_view == 2 ? "Retur Penjualan Kasir" :
+                              root.active_view == 3 ? "Pembelian & Pengadaan Supplier" :
+                              root.active_view == 4 ? "Katalog Data Barang" :
+                              root.active_view == 5 ? "Data Pelanggan & Member" :
+                              root.active_view == 6 ? "Data Supplier & Vendor" :
+                              root.active_view == 7 ? "Stok Opname & Penyesuaian Fisik" :
+                              root.active_view == 8 ? "Laporan Omzet & Penjualan (Tabel)" :
+                              root.active_view == 9 ? "Buku Hutang & Piutang Dagang" :
+                              root.active_view == 10 ? "Buku Kas & Biaya Operasional" :
+                              root.active_view == 11 ? "Rekapitulasi Shift Kasir" :
+                              "Pengaturan Sistem & Lisensi";
+                        font-size: 13px; font-weight: 700; color: #0f172a; vertical-alignment: center;
+                    }
+                }
+
+                // Status Kanan (Toko, Operator, Shift)
+                HorizontalLayout {
+                    spacing: 16px;
+                    alignment: end;
+
+                    Text { text: root.toko_nama; font-size: 12px; font-weight: 700; color: #0f172a; vertical-alignment: center; }
+                    Text { text: root.operator_nama; font-size: 11px; color: #64748b; vertical-alignment: center; }
+
+                    Rectangle {
+                        background: #dcfce7;
+                        border-radius: 4px;
+                        border-width: 1px;
+                        border-color: #bbf7d0;
+                        height: 24px;
+                        HorizontalLayout {
+                            padding-left: 8px; padding-right: 8px;
+                            Text { text: root.shift_status; font-size: 10px; font-weight: 700; color: #15803d; vertical-alignment: center; }
+                        }
+                    }
+                }
+            }
+        }
+
+        // =========================================================================
+        // BODY: SIDEBAR KIRI (NON-TAB) + WORKSPACE KANAN
+        // =========================================================================
+        HorizontalLayout {
+            spacing: 0px;
+            vertical-stretch: 1;
+
+            // SIDEBAR NAVIGASI KIRI (Width: 215px, Clean Light Style)
+            Rectangle {
+                width: 215px;
+                background: #ffffff;
+                border-width: 1px;
+                border-color: #e2e8f0;
+
+                VerticalLayout {
+                    padding: 8px;
+                    spacing: 2px;
+                    alignment: start;
+
+                    // Group: TRANSAKSI
+                    HorizontalLayout { padding-left: 8px; padding-top: 4px; padding-bottom: 2px; Text { text: "TRANSAKSI KASIR"; font-size: 10px; font-weight: 800; color: #94a3b8; } }
+                    Rectangle {
+                        height: 32px; border-radius: 4px;
+                        background: root.active_view == 0 ? #e0f2fe : transparent;
+                        border-width: root.active_view == 0 ? 1px : 0px; border-color: #bae6fd;
+                        TouchArea { clicked => { root.active_view = 0; root.navigasi(0); } }
+                        HorizontalLayout { padding-left: 10px; Text { text: "Kasir POS"; font-size: 12px; font-weight: root.active_view == 0 ? 700 : 500; color: root.active_view == 0 ? #0369a1 : #334155; vertical-alignment: center; } }
+                    }
+                    Rectangle {
+                        height: 32px; border-radius: 4px;
+                        background: root.active_view == 1 ? #e0f2fe : transparent;
+                        border-width: root.active_view == 1 ? 1px : 0px; border-color: #bae6fd;
+                        TouchArea { clicked => { root.active_view = 1; root.navigasi(1); } }
+                        HorizontalLayout { padding-left: 10px; Text { text: "Riwayat Penjualan"; font-size: 12px; font-weight: root.active_view == 1 ? 700 : 500; color: root.active_view == 1 ? #0369a1 : #334155; vertical-alignment: center; } }
+                    }
+                    Rectangle {
+                        height: 32px; border-radius: 4px;
+                        background: root.active_view == 2 ? #e0f2fe : transparent;
+                        border-width: root.active_view == 2 ? 1px : 0px; border-color: #bae6fd;
+                        TouchArea { clicked => { root.active_view = 2; root.navigasi(2); } }
+                        HorizontalLayout { padding-left: 10px; Text { text: "Retur Penjualan"; font-size: 12px; font-weight: root.active_view == 2 ? 700 : 500; color: root.active_view == 2 ? #0369a1 : #334155; vertical-alignment: center; } }
+                    }
+                    Rectangle {
+                        height: 32px; border-radius: 4px;
+                        background: root.active_view == 3 ? #e0f2fe : transparent;
+                        border-width: root.active_view == 3 ? 1px : 0px; border-color: #bae6fd;
+                        TouchArea { clicked => { root.active_view = 3; root.navigasi(3); } }
+                        HorizontalLayout { padding-left: 10px; Text { text: "Pembelian Supplier"; font-size: 12px; font-weight: root.active_view == 3 ? 700 : 500; color: root.active_view == 3 ? #0369a1 : #334155; vertical-alignment: center; } }
+                    }
+
+                    // Group: MASTER DATA
+                    HorizontalLayout { padding-left: 8px; padding-top: 8px; padding-bottom: 2px; Text { text: "MASTER DATA"; font-size: 10px; font-weight: 800; color: #94a3b8; } }
+                    Rectangle {
+                        height: 32px; border-radius: 4px;
+                        background: root.active_view == 4 ? #e0f2fe : transparent;
+                        border-width: root.active_view == 4 ? 1px : 0px; border-color: #bae6fd;
+                        TouchArea { clicked => { root.active_view = 4; root.navigasi(4); } }
+                        HorizontalLayout { padding-left: 10px; Text { text: "Katalog Barang"; font-size: 12px; font-weight: root.active_view == 4 ? 700 : 500; color: root.active_view == 4 ? #0369a1 : #334155; vertical-alignment: center; } }
+                    }
+                    Rectangle {
+                        height: 32px; border-radius: 4px;
+                        background: root.active_view == 5 ? #e0f2fe : transparent;
+                        border-width: root.active_view == 5 ? 1px : 0px; border-color: #bae6fd;
+                        TouchArea { clicked => { root.active_view = 5; root.navigasi(5); } }
+                        HorizontalLayout { padding-left: 10px; Text { text: "Pelanggan & Member"; font-size: 12px; font-weight: root.active_view == 5 ? 700 : 500; color: root.active_view == 5 ? #0369a1 : #334155; vertical-alignment: center; } }
+                    }
+                    Rectangle {
+                        height: 32px; border-radius: 4px;
+                        background: root.active_view == 6 ? #e0f2fe : transparent;
+                        border-width: root.active_view == 6 ? 1px : 0px; border-color: #bae6fd;
+                        TouchArea { clicked => { root.active_view = 6; root.navigasi(6); } }
+                        HorizontalLayout { padding-left: 10px; Text { text: "Supplier / Vendor"; font-size: 12px; font-weight: root.active_view == 6 ? 700 : 500; color: root.active_view == 6 ? #0369a1 : #334155; vertical-alignment: center; } }
+                    }
+                    Rectangle {
+                        height: 32px; border-radius: 4px;
+                        background: root.active_view == 7 ? #e0f2fe : transparent;
+                        border-width: root.active_view == 7 ? 1px : 0px; border-color: #bae6fd;
+                        TouchArea { clicked => { root.active_view = 7; root.navigasi(7); } }
+                        HorizontalLayout { padding-left: 10px; Text { text: "Stok Opname Fisik"; font-size: 12px; font-weight: root.active_view == 7 ? 700 : 500; color: root.active_view == 7 ? #0369a1 : #334155; vertical-alignment: center; } }
+                    }
+
+                    // Group: KEUANGAN & LAPORAN
+                    HorizontalLayout { padding-left: 8px; padding-top: 8px; padding-bottom: 2px; Text { text: "KEUANGAN & LAPORAN"; font-size: 10px; font-weight: 800; color: #94a3b8; } }
+                    Rectangle {
+                        height: 32px; border-radius: 4px;
+                        background: root.active_view == 8 ? #e0f2fe : transparent;
+                        border-width: root.active_view == 8 ? 1px : 0px; border-color: #bae6fd;
+                        TouchArea { clicked => { root.active_view = 8; root.navigasi(8); } }
+                        HorizontalLayout { padding-left: 10px; Text { text: "Laporan Omzet & Laba"; font-size: 12px; font-weight: root.active_view == 8 ? 700 : 500; color: root.active_view == 8 ? #0369a1 : #334155; vertical-alignment: center; } }
+                    }
+                    Rectangle {
+                        height: 32px; border-radius: 4px;
+                        background: root.active_view == 9 ? #e0f2fe : transparent;
+                        border-width: root.active_view == 9 ? 1px : 0px; border-color: #bae6fd;
+                        TouchArea { clicked => { root.active_view = 9; root.navigasi(9); } }
+                        HorizontalLayout { padding-left: 10px; Text { text: "Hutang & Piutang"; font-size: 12px; font-weight: root.active_view == 9 ? 700 : 500; color: root.active_view == 9 ? #0369a1 : #334155; vertical-alignment: center; } }
+                    }
+                    Rectangle {
+                        height: 32px; border-radius: 4px;
+                        background: root.active_view == 10 ? #e0f2fe : transparent;
+                        border-width: root.active_view == 10 ? 1px : 0px; border-color: #bae6fd;
+                        TouchArea { clicked => { root.active_view = 10; root.navigasi(10); } }
+                        HorizontalLayout { padding-left: 10px; Text { text: "Buku Kas & Biaya"; font-size: 12px; font-weight: root.active_view == 10 ? 700 : 500; color: root.active_view == 10 ? #0369a1 : #334155; vertical-alignment: center; } }
+                    }
+
+                    // Group: SISTEM
+                    HorizontalLayout { padding-left: 8px; padding-top: 8px; padding-bottom: 2px; Text { text: "SISTEM"; font-size: 10px; font-weight: 800; color: #94a3b8; } }
+                    Rectangle {
+                        height: 32px; border-radius: 4px;
+                        background: root.active_view == 11 ? #e0f2fe : transparent;
+                        border-width: root.active_view == 11 ? 1px : 0px; border-color: #bae6fd;
+                        TouchArea { clicked => { root.active_view = 11; root.navigasi(11); } }
+                        HorizontalLayout { padding-left: 10px; Text { text: "Shift Kasir"; font-size: 12px; font-weight: root.active_view == 11 ? 700 : 500; color: root.active_view == 11 ? #0369a1 : #334155; vertical-alignment: center; } }
+                    }
+                    Rectangle {
+                        height: 32px; border-radius: 4px;
+                        background: root.active_view == 12 ? #e0f2fe : transparent;
+                        border-width: root.active_view == 12 ? 1px : 0px; border-color: #bae6fd;
+                        TouchArea { clicked => { root.active_view = 12; root.navigasi(12); } }
+                        HorizontalLayout { padding-left: 10px; Text { text: "Pengaturan & Lisensi"; font-size: 12px; font-weight: root.active_view == 12 ? 700 : 500; color: root.active_view == 12 ? #0369a1 : #334155; vertical-alignment: center; } }
+                    }
+                }
+            }
+
+            // WORKSPACE KANAN (Tempat Menampilkan Modul Aktif)
+            VerticalLayout {
+                padding: 10px;
+                spacing: 8px;
+                vertical-stretch: 1;
+
+                if root.active_view == 0: KasirView {
+                    input_barcode <=> root.input_barcode;
+                    items: root.cart_items;
+                    total_belanja: root.total_belanja;
+                    bayar_tunai <=> root.bayar_tunai;
+                    kembalian: root.kembalian;
+                    cari_barcode(code) => { root.cari_barcode(code); }
+                    ubah_qty(idx, qty) => { root.ubah_qty_kasir(idx, qty); }
+                    hapus_item(idx) => { root.hapus_item_kasir(idx); }
+                    proses_bayar(tunai) => { root.proses_bayar(tunai); }
+                    reset_transaksi() => { root.reset_transaksi(); }
+                }
+
+                if root.active_view == 1: RiwayatView {
+                    items: root.history_items;
+                    total_omzet: root.total_omzet_riwayat;
+                    cetak_struk(faktur) => { root.cetak_struk_riwayat(faktur); }
+                    refresh_riwayat() => { root.refresh_riwayat(); }
+                }
+
+                if root.active_view == 2: ReturView {
+                    items: root.retur_items;
+                    proses_retur(faktur, kode, qty) => { root.proses_retur_penjualan(faktur, kode, qty); }
+                    refresh_retur() => { root.refresh_retur_penjualan(); }
+                }
+
+                if root.active_view == 3: PembelianView {
+                    items: root.pembelian_items;
+                    simpan_pembelian(kode, suplier, qty, harga, bayar, metode) => {
+                        root.simpan_transaksi_pembelian(kode, suplier, qty, harga, bayar, metode);
+                    }
+                    refresh_pembelian() => { root.refresh_transaksi_pembelian(); }
+                }
+
+                if root.active_view == 4: BarangView {
+                    products: root.products;
+                    filter_barang <=> root.filter_barang;
+                    total_item_barang: root.total_item_barang;
+                    total_nilai_beli: root.total_nilai_beli;
+                    total_nilai_jual: root.total_nilai_jual;
+                    cari_barang(kw) => { root.cari_barang(kw); }
+                    simpan_barang_baru(k, n, b, kat, sat, hp, hj, st) => { root.simpan_barang_baru(k, n, b, kat, sat, hp, hj, st); }
+                    hapus_barang(id) => { root.hapus_barang(id); }
+                }
+
+                if root.active_view == 5: PelangganView {
+                    items: root.pelanggan_items;
+                    cari_pelanggan(kw) => { root.cari_pelanggan(kw); }
+                }
+
+                if root.active_view == 6: SupplierView {
+                    items: root.supplier_items;
+                    tambah_supplier(k, n, telp, alm, rek) => { root.tambah_supplier_baru(k, n, telp, alm, rek); }
+                    hapus_supplier(id) => { root.hapus_supplier_id(id); }
+                    refresh_supplier() => { root.refresh_data_supplier(); }
+                }
+
+                if root.active_view == 7: StokOpnameView {
+                    items: root.opname_items;
+                    proses_opname(kode, fisik, alasan) => { root.proses_stok_opname(kode, fisik, alasan); }
+                    refresh_opname() => { root.refresh_stok_opname(); }
+                }
+
+                if root.active_view == 8: LaporanView {
+                    metrics: root.laporan_metrics;
+                    top_products: root.top_products;
+                    refresh_laporan() => { root.refresh_laporan(); }
+                }
+
+                if root.active_view == 9: HutangPiutangView {
+                    hutang_items: root.hutang_items;
+                    piutang_items: root.piutang_items;
+                    bayar_hutang(id, jml) => { root.bayar_cicilan_hutang(id, jml); }
+                    bayar_piutang(id, jml) => { root.bayar_cicilan_piutang(id, jml); }
+                    refresh_data() => { root.refresh_hutang_piutang(); }
+                }
+
+                if root.active_view == 10: BukuKasView {
+                    items: root.cashflow_items;
+                    total_masuk: root.kas_total_masuk;
+                    total_keluar: root.kas_total_keluar;
+                    saldo_kas: root.kas_saldo;
+                    catat_kas(jenis, kat, nom, ket) => { root.catat_arus_kas_biaya(jenis, kat, nom, ket); }
+                    refresh_kas() => { root.refresh_buku_kas(); }
+                }
+
+                if root.active_view == 11: ShiftView {
+                    modal_awal: root.shift_modal_awal;
+                    total_tunai: root.shift_tunai;
+                    total_nontunai: root.shift_nontunai;
+                    total_retur: root.shift_retur;
+                    uang_seharusnya: root.shift_uang_seharusnya;
+                    shift_status: root.shift_status;
+                    catatan <=> root.shift_catatan;
+                    tutup_shift() => { root.tutup_shift_kasir(); }
+                    buka_shift(modal) => { root.buka_shift_baru(modal); }
+                }
+
+                if root.active_view == 12: PengaturanView {
+                    machine_id: root.machine_id;
+                    input_license_token <=> root.input_license_token;
+                    license_status_text: root.license_status_text;
+                    license_toko: root.license_toko;
+                    input_sql_dump <=> root.input_sql_dump;
+                    import_summary: root.import_summary;
+                    aktivasi_lisensi(tok) => { root.aktivasi_lisensi(tok); }
+                    jalankan_import_sql(sql) => { root.jalankan_import_sql(sql); }
+                    buat_backup_db() => { root.buat_backup_db(); }
+                }
+            }
+        }
+
+        // =========================================================================
+        // STATUS BAR BAWAH (Light Theme, Border-Top)
+        // =========================================================================
+        Rectangle {
+            height: 28px;
+            background: #ffffff;
+            border-width: 1px;
+            border-color: #e2e8f0;
+
+            HorizontalLayout {
+                padding-left: 12px; padding-right: 12px;
+                alignment: space-between;
+                Text { text: root.status_pesan; font-size: 11px; color: #475569; vertical-alignment: center; }
+                Text { text: "FAZPOS Offline Engine (SQLite WAL) • Siap"; font-size: 10px; color: #94a3b8; vertical-alignment: center; }
+            }
+        }
+    }
+}

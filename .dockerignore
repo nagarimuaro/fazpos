@@ -1,0 +1,9 @@
+target/
+*.db
+*.db-wal
+*.db-shm
+*.key
+*.lic
+.git
+struk_terakhir.bin
+backups/

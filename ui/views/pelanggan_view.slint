@@ -1,0 +1,59 @@
+﻿import { PelangganGridData } from "../models.slint";
+
+export component PelangganView inherits Rectangle {
+    background: transparent;
+
+    in-out property <[PelangganGridData]> items: [];
+    callback cari_pelanggan(string);
+
+    VerticalLayout {
+        spacing: 8px;
+
+        Rectangle {
+            height: 44px; background: #ffffff; border-radius: 4px; border-width: 1px; border-color: #e2e8f0;
+            HorizontalLayout {
+                padding-left: 14px; padding-right: 14px; alignment: space-between;
+                Text { text: "Master Pelanggan & Member"; font-size: 14px; font-weight: 700; color: #0f172a; vertical-alignment: center; }
+            }
+        }
+
+        Rectangle {
+            background: #ffffff; border-radius: 4px; border-width: 1px; border-color: #e2e8f0;
+            vertical-stretch: 1;
+
+            VerticalLayout {
+                padding: 4px; spacing: 1px;
+                Rectangle {
+                    height: 30px; background: #f8fafc; border-width: 1px; border-color: #e2e8f0;
+                    HorizontalLayout {
+                        padding-left: 8px; padding-right: 8px;
+                        Text { width: 35px; text: "No."; font-size: 11px; font-weight: 700; color: #475569; vertical-alignment: center; }
+                        Text { width: 100px; text: "Kode"; font-size: 11px; font-weight: 700; color: #475569; vertical-alignment: center; }
+                        Text { width: 180px; text: "Nama Pelanggan"; font-size: 11px; font-weight: 700; color: #475569; vertical-alignment: center; }
+                        Text { horizontal-stretch: 1; text: "Alamat"; font-size: 11px; font-weight: 700; color: #475569; vertical-alignment: center; }
+                        Text { width: 130px; text: "No Hp / Telp"; font-size: 11px; font-weight: 700; color: #475569; vertical-alignment: center; }
+                        Text { width: 100px; text: "Poin Saldo"; font-size: 11px; font-weight: 700; color: #475569; horizontal-alignment: center; vertical-alignment: center; }
+                    }
+                }
+
+                for pl[idx] in root.items: Rectangle {
+                    height: 32px; background: Math.mod(idx, 2) == 0 ? #ffffff : #f8fafc; border-width: 1px; border-color: #f1f5f9;
+                    HorizontalLayout {
+                        padding-left: 8px; padding-right: 8px;
+                        Text { width: 35px; text: "" + (idx + 1); font-size: 11px; color: #64748b; vertical-alignment: center; }
+                        Text { width: 100px; text: pl.kode; font-size: 12px; font-weight: 600; color: #0284c7; vertical-alignment: center; }
+                        Text { width: 180px; text: pl.nama; font-size: 12px; font-weight: 600; color: #0f172a; vertical-alignment: center; }
+                        Text { horizontal-stretch: 1; text: pl.alamat; font-size: 12px; color: #334155; vertical-alignment: center; }
+                        Text { width: 130px; text: pl.telepon; font-size: 12px; color: #64748b; vertical-alignment: center; }
+                        Text { width: 100px; text: "" + pl.poin_saldo; font-size: 12px; font-weight: 700; color: #15803d; horizontal-alignment: center; vertical-alignment: center; }
+                    }
+                }
+
+                if root.items.length == 0: Rectangle {
+                    height: 180px;
+                    Text { text: "Data pelanggan kosong."; font-size: 13px; color: #94a3b8; horizontal-alignment: center; vertical-alignment: center; }
+                }
+            }
+        }
+    }
+}

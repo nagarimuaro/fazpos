@@ -1,0 +1,216 @@
+﻿import { CartItemData } from "../models.slint";
+
+export component KasirView inherits Rectangle {
+    background: transparent;
+
+    in-out property <string> input_barcode: "";
+    in-out property <[CartItemData]> items: [];
+    in-out property <float> total_belanja: 0.0;
+    in-out property <float> bayar_tunai: 0.0;
+    in-out property <float> kembalian: 0.0;
+
+    callback cari_barcode(string);
+    callback ubah_qty(int, float);
+    callback hapus_item(int);
+    callback proses_bayar(float);
+    callback reset_transaksi();
+
+    HorizontalLayout {
+        spacing: 12px;
+
+        // Kiri: Barcode Scanner & Tabel Keranjang
+        VerticalLayout {
+            horizontal-stretch: 3;
+            spacing: 8px;
+
+            // Barcode Search Box (Light Theme)
+            Rectangle {
+                height: 48px;
+                background: #ffffff;
+                border-radius: 4px;
+                border-width: 1px;
+                border-color: #cbd5e1;
+
+                HorizontalLayout {
+                    padding-left: 14px;
+                    padding-right: 14px;
+                    spacing: 10px;
+
+                    Text { text: "SCAN BARCODE / KODE:"; font-size: 11px; font-weight: 700; color: #0369a1; vertical-alignment: center; }
+                    TextInput {
+                        text <=> root.input_barcode;
+                        font-size: 15px;
+                        font-weight: 600;
+                        color: #0f172a;
+                        vertical-alignment: center;
+                        accepted => {
+                            root.cari_barcode(self.text);
+                            self.text = "";
+                        }
+                    }
+                }
+            }
+
+            // Tabel Keranjang Belanja
+            Rectangle {
+                background: #ffffff;
+                border-radius: 4px;
+                border-width: 1px;
+                border-color: #e2e8f0;
+                vertical-stretch: 1;
+
+                VerticalLayout {
+                    padding: 4px;
+                    spacing: 1px;
+
+                    // Table Header
+                    Rectangle {
+                        height: 32px;
+                        background: #f8fafc;
+                        border-width: 1px;
+                        border-color: #e2e8f0;
+
+                        HorizontalLayout {
+                            padding-left: 10px; padding-right: 10px;
+                            Text { width: 35px; text: "No."; font-size: 11px; font-weight: 700; color: #475569; vertical-alignment: center; }
+                            Text { width: 95px; text: "KODE"; font-size: 11px; font-weight: 700; color: #475569; vertical-alignment: center; }
+                            Text { horizontal-stretch: 1; text: "NAMA BARANG"; font-size: 11px; font-weight: 700; color: #475569; vertical-alignment: center; }
+                            Text { width: 65px; text: "SATUAN"; font-size: 11px; font-weight: 700; color: #475569; vertical-alignment: center; }
+                            Text { width: 110px; text: "QTY"; font-size: 11px; font-weight: 700; color: #475569; horizontal-alignment: center; vertical-alignment: center; }
+                            Text { width: 95px; text: "HARGA"; font-size: 11px; font-weight: 700; color: #475569; horizontal-alignment: right; vertical-alignment: center; }
+                            Text { width: 105px; text: "SUBTOTAL"; font-size: 11px; font-weight: 700; color: #475569; horizontal-alignment: right; vertical-alignment: center; }
+                            Text { width: 35px; text: ""; font-size: 11px; }
+                        }
+                    }
+
+                    // Table Rows
+                    for item[idx] in root.items: Rectangle {
+                        height: 34px;
+                        background: Math.mod(idx, 2) == 0 ? #ffffff : #f8fafc;
+                        border-width: 1px;
+                        border-color: #f1f5f9;
+
+                        HorizontalLayout {
+                            padding-left: 10px; padding-right: 10px;
+                            Text { width: 35px; text: "" + (idx + 1); font-size: 11px; color: #64748b; vertical-alignment: center; }
+                            Text { width: 95px; text: item.kode; font-size: 12px; font-weight: 600; color: #0284c7; vertical-alignment: center; }
+                            Text { horizontal-stretch: 1; text: item.nama; font-size: 12px; font-weight: 600; color: #0f172a; vertical-alignment: center; }
+                            Text { width: 65px; text: item.satuan; font-size: 12px; color: #475569; vertical-alignment: center; }
+
+                            // Qty Buttons (- / Qty / +)
+                            HorizontalLayout {
+                                width: 110px;
+                                alignment: center;
+                                spacing: 4px;
+
+                                Rectangle {
+                                    width: 22px; height: 22px; background: #e2e8f0; border-radius: 3px;
+                                    TouchArea { clicked => { root.ubah_qty(idx, item.jumlah - 1.0); } }
+                                    Text { text: "-"; font-size: 13px; font-weight: 700; color: #1e293b; horizontal-alignment: center; vertical-alignment: center; }
+                                }
+                                Text { text: "" + item.jumlah; font-size: 12px; font-weight: 700; color: #0f172a; vertical-alignment: center; width: 40px; horizontal-alignment: center; }
+                                Rectangle {
+                                    width: 22px; height: 22px; background: #e2e8f0; border-radius: 3px;
+                                    TouchArea { clicked => { root.ubah_qty(idx, item.jumlah + 1.0); } }
+                                    Text { text: "+"; font-size: 13px; font-weight: 700; color: #1e293b; horizontal-alignment: center; vertical-alignment: center; }
+                                }
+                            }
+
+                            Text { width: 95px; text: "" + item.harga; font-size: 12px; color: #334155; horizontal-alignment: right; vertical-alignment: center; }
+                            Text { width: 105px; text: "" + item.subtotal; font-size: 13px; font-weight: 700; color: #15803d; horizontal-alignment: right; vertical-alignment: center; }
+
+                            // Tombol Hapus Baris
+                            Rectangle {
+                                width: 35px;
+                                Rectangle {
+                                    width: 20px; height: 20px; background: #fee2e2; border-radius: 3px;
+                                    TouchArea { clicked => { root.hapus_item(idx); } }
+                                    Text { text: "X"; font-size: 10px; font-weight: 700; color: #dc2626; horizontal-alignment: center; vertical-alignment: center; }
+                                }
+                            }
+                        }
+                    }
+
+                    if root.items.length == 0: Rectangle {
+                        height: 240px;
+                        Text { text: "Keranjang kasir kosong. Scan barcode atau masukkan kode produk di atas."; font-size: 13px; color: #94a3b8; horizontal-alignment: center; vertical-alignment: center; }
+                    }
+                }
+            }
+        }
+
+        // Kanan: Panel Kasir (Total, Input Tunai, Kembalian)
+        VerticalLayout {
+            horizontal-stretch: 1;
+            spacing: 8px;
+
+            // Display Total Besar
+            Rectangle {
+                background: #f0fdf4;
+                border-radius: 4px;
+                border-width: 1px;
+                border-color: #bbf7d0;
+                VerticalLayout {
+                    padding: 16px;
+                    spacing: 4px;
+                    Text { text: "TOTAL TAGIHAN"; font-size: 11px; font-weight: 700; color: #166534; }
+                    Text { text: "Rp " + root.total_belanja; font-size: 32px; font-weight: 800; color: #15803d; }
+                }
+            }
+
+            // Form Pembayaran
+            Rectangle {
+                background: #ffffff;
+                border-radius: 4px;
+                border-width: 1px;
+                border-color: #cbd5e1;
+                VerticalLayout {
+                    padding: 14px;
+                    spacing: 12px;
+
+                    VerticalLayout {
+                        spacing: 4px;
+                        Text { text: "Uang Diterima (Tunai):"; font-size: 11px; font-weight: 600; color: #334155; }
+                        Rectangle {
+                            height: 40px; background: #f8fafc; border-radius: 4px; border-width: 1px; border-color: #cbd5e1;
+                            HorizontalLayout {
+                                padding-left: 10px; padding-right: 10px;
+                                input_tunai := TextInput {
+                                    text: "0";
+                                    font-size: 16px;
+                                    font-weight: 700;
+                                    color: #0f172a;
+                                    vertical-alignment: center;
+                                }
+                            }
+                        }
+                    }
+
+                    VerticalLayout {
+                        spacing: 2px;
+                        Text { text: "Kembalian:"; font-size: 11px; color: #64748b; }
+                        Text { text: "Rp " + root.kembalian; font-size: 22px; font-weight: 800; color: #0284c7; }
+                    }
+
+                    Rectangle {
+                        height: 44px; background: #0284c7; border-radius: 4px;
+                        TouchArea { clicked => {
+                            root.bayar_tunai = input_tunai.text.to-float();
+                            root.proses_bayar(input_tunai.text.to-float());
+                        } }
+                        Text { text: "SIMPAN TRANSAKSI (F5)"; font-size: 12px; font-weight: 700; color: #ffffff; horizontal-alignment: center; vertical-alignment: center; }
+                    }
+
+                    Rectangle {
+                        height: 34px; background: #e2e8f0; border-radius: 4px;
+                        TouchArea { clicked => {
+                            input_tunai.text = "0";
+                            root.reset_transaksi();
+                        } }
+                        Text { text: "BATALKAN TRANSAKSI"; font-size: 11px; font-weight: 600; color: #475569; horizontal-alignment: center; vertical-alignment: center; }
+                    }
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,96 @@
+﻿export component ShiftView inherits Rectangle {
+    background: transparent;
+
+    in-out property <float> modal_awal: 100000.0;
+    in-out property <float> total_tunai: 0.0;
+    in-out property <float> total_nontunai: 0.0;
+    in-out property <float> total_retur: 0.0;
+    in-out property <float> uang_seharusnya: 100000.0;
+    in-out property <string> shift_status: "SHIFT AKTIF";
+    in-out property <string> catatan: "";
+    in-out property <string> input_modal_buka: "100000";
+
+    callback tutup_shift();
+    callback buka_shift(float);
+
+    HorizontalLayout {
+        spacing: 12px;
+
+        // Rekapitulasi Kas Shift (Kiri)
+        Rectangle {
+            horizontal-stretch: 1;
+            background: #ffffff;
+            border-radius: 4px;
+            border-width: 1px;
+            border-color: #cbd5e1;
+
+            VerticalLayout {
+                padding: 18px;
+                spacing: 12px;
+
+                Text { text: "REKAPITULASI KAS SHIFT KASIR"; font-size: 13px; font-weight: 800; color: #0369a1; }
+
+                HorizontalLayout { alignment: space-between; Text { text: "Modal Awal Kasir:"; color: #475569; font-size: 12px; } Text { text: "Rp " + root.modal_awal; font-weight: 700; color: #0f172a; font-size: 13px; } }
+                HorizontalLayout { alignment: space-between; Text { text: "Total Penjualan Tunai (+):"; color: #475569; font-size: 12px; } Text { text: "Rp " + root.total_tunai; font-weight: 700; color: #15803d; font-size: 13px; } }
+                HorizontalLayout { alignment: space-between; Text { text: "Total Penjualan Non-Tunai:"; color: #475569; font-size: 12px; } Text { text: "Rp " + root.total_nontunai; font-weight: 700; color: #0284c7; font-size: 13px; } }
+                HorizontalLayout { alignment: space-between; Text { text: "Total Retur (-):"; color: #475569; font-size: 12px; } Text { text: "Rp " + root.total_retur; font-weight: 700; color: #dc2626; font-size: 13px; } }
+
+                Rectangle { height: 1px; background: #e2e8f0; }
+
+                HorizontalLayout {
+                    alignment: space-between;
+                    Text { text: "Uang Kas Seharusnya:"; font-size: 13px; font-weight: 800; color: #0f172a; }
+                    Text { text: "Rp " + root.uang_seharusnya; font-size: 20px; font-weight: 800; color: #0284c7; }
+                }
+            }
+        }
+
+        // Panel Aksi Tutup / Buka Shift (Kanan)
+        Rectangle {
+            horizontal-stretch: 1;
+            background: #ffffff;
+            border-radius: 4px;
+            border-width: 1px;
+            border-color: #cbd5e1;
+
+            VerticalLayout {
+                padding: 18px;
+                spacing: 14px;
+
+                if root.shift_status != "CLOSED": VerticalLayout {
+                    spacing: 12px;
+                    Text { text: "TUTUP SHIFT KASIR AKTIF"; font-size: 13px; font-weight: 800; color: #b45309; }
+
+                    VerticalLayout {
+                        spacing: 4px;
+                        Text { text: "Catatan Kasir / Keterangan:"; font-size: 11px; font-weight: 600; color: #475569; }
+                        Rectangle { height: 38px; background: #f8fafc; border-radius: 4px; border-width: 1px; border-color: #cbd5e1; HorizontalLayout { padding-left: 8px; TextInput { text <=> root.catatan; font-size: 12px; color: #0f172a; vertical-alignment: center; } } }
+                    }
+
+                    Rectangle {
+                        height: 42px; background: #dc2626; border-radius: 4px;
+                        TouchArea { clicked => { root.tutup_shift(); } }
+                        Text { text: "TUTUP SHIFT KASIR SEKARANG"; font-size: 12px; font-weight: 700; color: #ffffff; horizontal-alignment: center; vertical-alignment: center; }
+                    }
+                }
+
+                if root.shift_status == "CLOSED": VerticalLayout {
+                    spacing: 12px;
+                    Text { text: "BUKA SHIFT KASIR BARU"; font-size: 13px; font-weight: 800; color: #16a34a; }
+
+                    VerticalLayout {
+                        spacing: 4px;
+                        Text { text: "Modal Awal Kasir (Rp):"; font-size: 11px; font-weight: 600; color: #475569; }
+                        Rectangle { height: 38px; background: #f8fafc; border-radius: 4px; border-width: 1px; border-color: #cbd5e1; HorizontalLayout { padding-left: 8px; TextInput { text <=> root.input_modal_buka; font-size: 14px; font-weight: 700; color: #0f172a; vertical-alignment: center; } } }
+                    }
+
+                    Rectangle {
+                        height: 42px; background: #16a34a; border-radius: 4px;
+                        TouchArea { clicked => { root.buka_shift(root.input_modal_buka.to-float()); } }
+                        Text { text: "BUKA SHIFT BARU"; font-size: 12px; font-weight: 700; color: #ffffff; horizontal-alignment: center; vertical-alignment: center; }
+                    }
+                }
+            }
+        }
+    }
+}

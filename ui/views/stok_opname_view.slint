@@ -1,0 +1,112 @@
+﻿import { OpnameGridData } from "../models.slint";
+
+export component StokOpnameView inherits Rectangle {
+    background: transparent;
+
+    in-out property <[OpnameGridData]> items: [];
+    in-out property <string> input_kode_barang: "";
+    in-out property <string> input_stok_fisik: "0";
+    in-out property <string> input_alasan: "Penyesuaian Fisik";
+
+    callback proses_opname(string, float, string);
+    callback refresh_opname();
+
+    VerticalLayout {
+        spacing: 8px;
+
+        Rectangle {
+            height: 44px; background: #ffffff; border-radius: 4px; border-width: 1px; border-color: #e2e8f0;
+            HorizontalLayout {
+                padding-left: 14px; padding-right: 14px; alignment: space-between;
+                Text { text: "Stok Opname & Penyesuaian Fisik Gudang"; font-size: 14px; font-weight: 700; color: #0f172a; vertical-alignment: center; }
+                Rectangle {
+                    height: 28px; background: #e2e8f0; border-radius: 3px;
+                    TouchArea { clicked => { root.refresh_opname(); } }
+                    HorizontalLayout { padding-left: 10px; padding-right: 10px; Text { text: "Refresh"; font-size: 11px; font-weight: 600; color: #334155; vertical-alignment: center; } }
+                }
+            }
+        }
+
+        // Form Cek & Penyesuaian Cepat
+        Rectangle {
+            background: #ffffff; border-radius: 4px; border-width: 1px; border-color: #cbd5e1;
+
+            HorizontalLayout {
+                padding: 10px;
+                spacing: 12px;
+                alignment: start;
+
+                VerticalLayout {
+                    spacing: 3px; width: 160px;
+                    Text { text: "Kode / Barcode Produk:"; font-size: 11px; font-weight: 600; color: #475569; }
+                    Rectangle { height: 32px; background: #f8fafc; border-radius: 4px; border-width: 1px; border-color: #cbd5e1; HorizontalLayout { padding-left: 6px; TextInput { text <=> root.input_kode_barang; font-size: 12px; color: #0f172a; vertical-alignment: center; } } }
+                }
+                VerticalLayout {
+                    spacing: 3px; width: 110px;
+                    Text { text: "Jumlah Fisik Nyata:"; font-size: 11px; font-weight: 600; color: #475569; }
+                    Rectangle { height: 32px; background: #f8fafc; border-radius: 4px; border-width: 1px; border-color: #cbd5e1; HorizontalLayout { padding-left: 6px; TextInput { text <=> root.input_stok_fisik; font-size: 12px; color: #0f172a; vertical-alignment: center; } } }
+                }
+                VerticalLayout {
+                    spacing: 3px; horizontal-stretch: 1;
+                    Text { text: "Keterangan / Alasan:"; font-size: 11px; font-weight: 600; color: #475569; }
+                    Rectangle { height: 32px; background: #f8fafc; border-radius: 4px; border-width: 1px; border-color: #cbd5e1; HorizontalLayout { padding-left: 6px; TextInput { text <=> root.input_alasan; font-size: 12px; color: #0f172a; vertical-alignment: center; } } }
+                }
+                VerticalLayout {
+                    spacing: 3px; width: 140px;
+                    Text { text: "Aksi:"; font-size: 11px; color: transparent; }
+                    Rectangle {
+                        height: 32px; background: #0284c7; border-radius: 4px;
+                        TouchArea { clicked => {
+                            root.proses_opname(root.input_kode_barang, root.input_stok_fisik.to-float(), root.input_alasan);
+                        } }
+                        Text { text: "SIMPAN OPNAME"; font-size: 11px; font-weight: 700; color: #ffffff; horizontal-alignment: center; vertical-alignment: center; }
+                    }
+                }
+            }
+        }
+
+        // Tabel Riwayat Opname
+        Rectangle {
+            background: #ffffff; border-radius: 4px; border-width: 1px; border-color: #e2e8f0;
+            vertical-stretch: 1;
+
+            VerticalLayout {
+                padding: 4px; spacing: 1px;
+                Rectangle {
+                    height: 30px; background: #f8fafc; border-width: 1px; border-color: #e2e8f0;
+                    HorizontalLayout {
+                        padding-left: 8px; padding-right: 8px;
+                        Text { width: 35px; text: "No."; font-size: 11px; font-weight: 700; color: #475569; vertical-alignment: center; }
+                        Text { width: 110px; text: "Kode"; font-size: 11px; font-weight: 700; color: #475569; vertical-alignment: center; }
+                        Text { horizontal-stretch: 1; text: "Nama Produk"; font-size: 11px; font-weight: 700; color: #475569; vertical-alignment: center; }
+                        Text { width: 140px; text: "Waktu Opname"; font-size: 11px; font-weight: 700; color: #475569; vertical-alignment: center; }
+                        Text { width: 90px; text: "Stok Sistem"; font-size: 11px; font-weight: 700; color: #475569; horizontal-alignment: center; vertical-alignment: center; }
+                        Text { width: 90px; text: "Stok Fisik"; font-size: 11px; font-weight: 700; color: #475569; horizontal-alignment: center; vertical-alignment: center; }
+                        Text { width: 90px; text: "Selisih"; font-size: 11px; font-weight: 700; color: #475569; horizontal-alignment: center; vertical-alignment: center; }
+                        Text { width: 140px; text: "Alasan"; font-size: 11px; font-weight: 700; color: #475569; vertical-alignment: center; }
+                    }
+                }
+
+                for o[idx] in root.items: Rectangle {
+                    height: 32px; background: Math.mod(idx, 2) == 0 ? #ffffff : #f8fafc; border-width: 1px; border-color: #f1f5f9;
+                    HorizontalLayout {
+                        padding-left: 8px; padding-right: 8px;
+                        Text { width: 35px; text: "" + (idx + 1); font-size: 11px; color: #64748b; vertical-alignment: center; }
+                        Text { width: 110px; text: o.kode; font-size: 12px; font-weight: 600; color: #0284c7; vertical-alignment: center; }
+                        Text { horizontal-stretch: 1; text: o.nama; font-size: 12px; color: #0f172a; vertical-alignment: center; }
+                        Text { width: 140px; text: o.tanggal; font-size: 11px; color: #64748b; vertical-alignment: center; }
+                        Text { width: 90px; text: "" + o.stok_sistem; font-size: 12px; color: #334155; horizontal-alignment: center; vertical-alignment: center; }
+                        Text { width: 90px; text: "" + o.stok_fisik; font-size: 12px; font-weight: 700; color: #0284c7; horizontal-alignment: center; vertical-alignment: center; }
+                        Text { width: 90px; text: (o.selisih > 0 ? "+" : "") + o.selisih; font-size: 12px; font-weight: 700; color: o.selisih == 0 ? #15803d : (o.selisih > 0 ? #0284c7 : #dc2626); horizontal-alignment: center; vertical-alignment: center; }
+                        Text { width: 140px; text: o.alasan; font-size: 11px; color: #64748b; vertical-alignment: center; }
+                    }
+                }
+
+                if root.items.length == 0: Rectangle {
+                    height: 180px;
+                    Text { text: "Belum ada riwayat stok opname."; font-size: 13px; color: #94a3b8; horizontal-alignment: center; vertical-alignment: center; }
+                }
+            }
+        }
+    }
+}

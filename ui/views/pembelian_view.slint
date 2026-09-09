@@ -1,0 +1,139 @@
+﻿import { PembelianGridData } from "../models.slint";
+
+export component PembelianView inherits Rectangle {
+    background: transparent;
+
+    in-out property <[PembelianGridData]> items: [];
+    in-out property <string> input_kode_barang: "";
+    in-out property <string> input_nama_supplier: "";
+    in-out property <string> input_qty: "1";
+    in-out property <string> input_harga_beli: "0";
+    in-out property <string> input_bayar: "0";
+    in-out property <string> input_metode: "TUNAI";
+
+    callback simpan_pembelian(string, string, float, float, float, string);
+    callback refresh_pembelian();
+
+    VerticalLayout {
+        spacing: 8px;
+
+        Rectangle {
+            height: 44px; background: #ffffff; border-radius: 4px; border-width: 1px; border-color: #e2e8f0;
+            HorizontalLayout {
+                padding-left: 14px; padding-right: 14px; alignment: space-between;
+                Text { text: "Transaksi Pembelian & Pengadaan Barang"; font-size: 14px; font-weight: 700; color: #0f172a; vertical-alignment: center; }
+                Rectangle {
+                    height: 28px; background: #e2e8f0; border-radius: 3px;
+                    TouchArea { clicked => { root.refresh_pembelian(); } }
+                    HorizontalLayout { padding-left: 10px; padding-right: 10px; Text { text: "Refresh"; font-size: 11px; font-weight: 600; color: #334155; vertical-alignment: center; } }
+                }
+            }
+        }
+
+        // Form Entri Pembelian Cepat
+        Rectangle {
+            background: #ffffff; border-radius: 4px; border-width: 1px; border-color: #cbd5e1;
+
+            HorizontalLayout {
+                padding: 10px;
+                spacing: 10px;
+                alignment: start;
+
+                VerticalLayout {
+                    spacing: 3px; width: 140px;
+                    Text { text: "Kode / Barcode:"; font-size: 11px; font-weight: 600; color: #475569; }
+                    Rectangle { height: 32px; background: #f8fafc; border-radius: 4px; border-width: 1px; border-color: #cbd5e1; HorizontalLayout { padding-left: 6px; TextInput { text <=> root.input_kode_barang; font-size: 12px; color: #0f172a; vertical-alignment: center; } } }
+                }
+                VerticalLayout {
+                    spacing: 3px; horizontal-stretch: 1;
+                    Text { text: "Nama Supplier:"; font-size: 11px; font-weight: 600; color: #475569; }
+                    Rectangle { height: 32px; background: #f8fafc; border-radius: 4px; border-width: 1px; border-color: #cbd5e1; HorizontalLayout { padding-left: 6px; TextInput { text <=> root.input_nama_supplier; font-size: 12px; color: #0f172a; vertical-alignment: center; } } }
+                }
+                VerticalLayout {
+                    spacing: 3px; width: 80px;
+                    Text { text: "Qty Beli:"; font-size: 11px; font-weight: 600; color: #475569; }
+                    Rectangle { height: 32px; background: #f8fafc; border-radius: 4px; border-width: 1px; border-color: #cbd5e1; HorizontalLayout { padding-left: 6px; TextInput { text <=> root.input_qty; font-size: 12px; color: #0f172a; vertical-alignment: center; } } }
+                }
+                VerticalLayout {
+                    spacing: 3px; width: 110px;
+                    Text { text: "Harga Pokok (Rp):"; font-size: 11px; font-weight: 600; color: #475569; }
+                    Rectangle { height: 32px; background: #f8fafc; border-radius: 4px; border-width: 1px; border-color: #cbd5e1; HorizontalLayout { padding-left: 6px; TextInput { text <=> root.input_harga_beli; font-size: 12px; color: #0f172a; vertical-alignment: center; } } }
+                }
+                VerticalLayout {
+                    spacing: 3px; width: 110px;
+                    Text { text: "Uang Muka/Bayar:"; font-size: 11px; font-weight: 600; color: #475569; }
+                    Rectangle { height: 32px; background: #f8fafc; border-radius: 4px; border-width: 1px; border-color: #cbd5e1; HorizontalLayout { padding-left: 6px; TextInput { text <=> root.input_bayar; font-size: 12px; color: #0f172a; vertical-alignment: center; } } }
+                }
+                VerticalLayout {
+                    spacing: 3px; width: 90px;
+                    Text { text: "Metode:"; font-size: 11px; font-weight: 600; color: #475569; }
+                    Rectangle {
+                        height: 32px; border-radius: 4px; background: root.input_metode == "TUNAI" ? #16a34a : #d97706;
+                        TouchArea { clicked => { root.input_metode = root.input_metode == "TUNAI" ? "KREDIT" : "TUNAI"; } }
+                        Text { text: root.input_metode; font-size: 11px; font-weight: 700; color: #ffffff; horizontal-alignment: center; vertical-alignment: center; }
+                    }
+                }
+                VerticalLayout {
+                    spacing: 3px; width: 130px;
+                    Text { text: "Aksi:"; font-size: 11px; color: transparent; }
+                    Rectangle {
+                        height: 32px; background: #0284c7; border-radius: 4px;
+                        TouchArea { clicked => {
+                            root.simpan_pembelian(
+                                root.input_kode_barang,
+                                root.input_nama_supplier,
+                                root.input_qty.to-float(),
+                                root.input_harga_beli.to-float(),
+                                root.input_bayar.to-float(),
+                                root.input_metode
+                            );
+                        } }
+                        Text { text: "SIMPAN NOTA"; font-size: 11px; font-weight: 700; color: #ffffff; horizontal-alignment: center; vertical-alignment: center; }
+                    }
+                }
+            }
+        }
+
+        // Tabel Riwayat Pembelian
+        Rectangle {
+            background: #ffffff; border-radius: 4px; border-width: 1px; border-color: #e2e8f0;
+            vertical-stretch: 1;
+
+            VerticalLayout {
+                padding: 4px; spacing: 1px;
+                Rectangle {
+                    height: 30px; background: #f8fafc; border-width: 1px; border-color: #e2e8f0;
+                    HorizontalLayout {
+                        padding-left: 8px; padding-right: 8px;
+                        Text { width: 35px; text: "No."; font-size: 11px; font-weight: 700; color: #475569; vertical-alignment: center; }
+                        Text { width: 160px; text: "Faktur Beli"; font-size: 11px; font-weight: 700; color: #475569; vertical-alignment: center; }
+                        Text { horizontal-stretch: 1; text: "Supplier"; font-size: 11px; font-weight: 700; color: #475569; vertical-alignment: center; }
+                        Text { width: 140px; text: "Tanggal"; font-size: 11px; font-weight: 700; color: #475569; vertical-alignment: center; }
+                        Text { width: 120px; text: "Total (Rp)"; font-size: 11px; font-weight: 700; color: #475569; horizontal-alignment: right; vertical-alignment: center; }
+                        Text { width: 120px; text: "Bayar (Rp)"; font-size: 11px; font-weight: 700; color: #475569; horizontal-alignment: right; vertical-alignment: center; }
+                        Text { width: 120px; text: "Sisa Hutang"; font-size: 11px; font-weight: 700; color: #475569; horizontal-alignment: right; vertical-alignment: center; }
+                    }
+                }
+
+                for p[idx] in root.items: Rectangle {
+                    height: 32px; background: Math.mod(idx, 2) == 0 ? #ffffff : #f8fafc; border-width: 1px; border-color: #f1f5f9;
+                    HorizontalLayout {
+                        padding-left: 8px; padding-right: 8px;
+                        Text { width: 35px; text: "" + (idx + 1); font-size: 11px; color: #64748b; vertical-alignment: center; }
+                        Text { width: 160px; text: p.faktur; font-size: 12px; font-weight: 600; color: #0284c7; vertical-alignment: center; }
+                        Text { horizontal-stretch: 1; text: p.supplier; font-size: 12px; color: #0f172a; vertical-alignment: center; }
+                        Text { width: 140px; text: p.tanggal; font-size: 11px; color: #64748b; vertical-alignment: center; }
+                        Text { width: 120px; text: "Rp " + p.total; font-size: 12px; font-weight: 700; color: #0f172a; horizontal-alignment: right; vertical-alignment: center; }
+                        Text { width: 120px; text: "Rp " + p.bayar; font-size: 12px; color: #15803d; horizontal-alignment: right; vertical-alignment: center; }
+                        Text { width: 120px; text: p.sisa > 0 ? "Rp " + p.sisa : "LUNAS"; font-size: 12px; font-weight: 700; color: p.sisa > 0 ? #dc2626 : #15803d; horizontal-alignment: right; vertical-alignment: center; }
+                    }
+                }
+
+                if root.items.length == 0: Rectangle {
+                    height: 180px;
+                    Text { text: "Belum ada transaksi pembelian barang."; font-size: 13px; color: #94a3b8; horizontal-alignment: center; vertical-alignment: center; }
+                }
+            }
+        }
+    }
+}

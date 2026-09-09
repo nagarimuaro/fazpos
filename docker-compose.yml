@@ -1,0 +1,10 @@
+services:
+  fazpos:
+    build: .
+    container_name: fazpos
+    environment:
+      - RUST_LOG=info
+      - SLINT_BACKEND=winit
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
