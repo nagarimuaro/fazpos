@@ -77,13 +77,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let window_handle = main_window.as_weak();
 
     // ==========================================
-    // CALLBACK: Navigasi Menu Non-Tab (Sidebar Kiri)
+    // CALLBACK: Navigasi Menu Ribbon (Instant 0ms Switching via Cache)
     // ==========================================
+    let loaded_views = Rc::new(RefCell::new([false; 13]));
+    loaded_views.borrow_mut()[0] = true;
+    let loaded_views_nav = Rc::clone(&loaded_views);
     let db_nav = Rc::clone(&db_ref);
     let win_handle_nav = window_handle.clone();
     let cid_nav = cabang_id.clone();
     let did_nav = device_id.clone();
     main_window.on_navigasi(move |view_idx| {
+        let idx = view_idx as usize;
+        let mut loaded = loaded_views_nav.borrow_mut();
+        if idx < loaded.len() && loaded[idx] {
+            return;
+        }
+        if idx < loaded.len() {
+            loaded[idx] = true;
+        }
         let mut database = db_nav.borrow_mut();
         if let Some(win) = win_handle_nav.upgrade() {
             match view_idx {

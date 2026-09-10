@@ -203,11 +203,12 @@ export component KasirView inherits Rectangle {
                             }
                         }
 
-                        // Product Rows
+                        // Product Rows (Capped at 35 for 0ms instant rendering)
                         for p[idx] in root.catalog_products: Rectangle {
-                            height: AppStyle.row-height-dense;
+                            visible: idx < 35;
+                            height: idx < 35 ? AppStyle.row-height-dense : 0px;
                             background: p.is_kritis ? AppStyle.warning-bg : (Math.mod(idx, 2) == 0 ? AppStyle.surface : AppStyle.row-alt);
-                            border-width: 1px;
+                            border-width: idx < 35 ? 1px : 0px;
                             border-color: AppStyle.border-subtle;
 
                             HorizontalLayout {
