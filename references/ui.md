@@ -1,3 +1,4 @@
+//ui.md
 # MASTER RULE — ANTI AI-SLOP
 
 ## SVELTE / SVELTEKIT

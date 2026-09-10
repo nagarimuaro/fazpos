@@ -1,4 +1,4 @@
-﻿import { CartItemData, ProductGridData, PelangganGridData, TransactionGridData, TopProductData, LaporanMetricData, ReturGridData, SupplierGridData, PembelianGridData, HutangGridData, OpnameGridData, CashflowGridData } from "models.slint";
+﻿import { CartItemData, ProductGridData, PelangganGridData, TransactionGridData, TopProductData, LaporanMetricData, ReturGridData, SupplierGridData, PembelianGridData, HutangGridData, OpnameGridData, CashflowGridData, PendingGridData } from "models.slint";
 import { KasirView } from "views/kasir_view.slint";
 import { BarangView } from "views/barang_view.slint";
 import { PelangganView } from "views/pelanggan_view.slint";
@@ -13,7 +13,21 @@ import { HutangPiutangView } from "views/hutang_piutang_view.slint";
 import { StokOpnameView } from "views/stok_opname_view.slint";
 import { BukuKasView } from "views/buku_kas_view.slint";
 
-export { CartItemData, ProductGridData, PelangganGridData, TransactionGridData, TopProductData, LaporanMetricData, ReturGridData, SupplierGridData, PembelianGridData, HutangGridData, OpnameGridData, CashflowGridData }
+export { 
+    CartItemData, 
+    ProductGridData, 
+    PelangganGridData, 
+    TransactionGridData, 
+    TopProductData, 
+    LaporanMetricData, 
+    ReturGridData, 
+    SupplierGridData, 
+    PembelianGridData, 
+    HutangGridData, 
+    OpnameGridData, 
+    CashflowGridData, 
+    PendingGridData 
+}
 
 export component MainWindow inherits Window {
     title: "FAZPOS — Sistem Kasir & Manajemen Toko Ritel Grosir";
@@ -41,6 +55,15 @@ export component MainWindow inherits Window {
     in-out property <float> total_belanja: 0.0;
     in-out property <float> bayar_tunai: 0.0;
     in-out property <float> kembalian: 0.0;
+
+    // Member & Loyalty Poin Kasir
+    in-out property <string> member_nama: "UMUM (Non-Member)";
+    in-out property <string> member_kode: "UMUM";
+    in-out property <int> member_poin_saldo: 0;
+    in-out property <bool> is_member_attached: false;
+    in-out property <float> nilai_tukar_poin: 0.0;
+    in-out property <[PendingGridData]> pending_items: [];
+    in-out property <string> kasir_metode_bayar: "TUNAI";
 
     in-out property <[ProductGridData]> products: [];
     in-out property <string> filter_barang: "";
@@ -89,6 +112,13 @@ export component MainWindow inherits Window {
     callback hapus_item_kasir(int);
     callback proses_bayar(float);
     callback reset_transaksi();
+    callback cari_member_kasir(string);
+    callback lepas_member_kasir();
+    callback tukar_poin_kasir(int);
+    callback batal_tukar_poin_kasir();
+    callback hold_transaksi_kasir(string);
+    callback recall_transaksi_kasir(string);
+    callback hapus_pending_kasir(string);
     callback cari_barang(string);
     callback simpan_barang_baru(string, string, string, string, string, float, float, float);
     callback hapus_barang(string);
@@ -318,11 +348,28 @@ export component MainWindow inherits Window {
                     total_belanja: root.total_belanja;
                     bayar_tunai <=> root.bayar_tunai;
                     kembalian: root.kembalian;
+
+                    member_nama: root.member_nama;
+                    member_kode: root.member_kode;
+                    member_poin_saldo: root.member_poin_saldo;
+                    is_member_attached: root.is_member_attached;
+                    nilai_tukar_poin: root.nilai_tukar_poin;
+                    pending_items: root.pending_items;
+                    metode_bayar <=> root.kasir_metode_bayar;
+
                     cari_barcode(code) => { root.cari_barcode(code); }
                     ubah_qty(idx, qty) => { root.ubah_qty_kasir(idx, qty); }
                     hapus_item(idx) => { root.hapus_item_kasir(idx); }
                     proses_bayar(tunai) => { root.proses_bayar(tunai); }
                     reset_transaksi() => { root.reset_transaksi(); }
+
+                    cari_member(q) => { root.cari_member_kasir(q); }
+                    lepas_member() => { root.lepas_member_kasir(); }
+                    tukar_poin(p) => { root.tukar_poin_kasir(p); }
+                    batal_tukar_poin() => { root.batal_tukar_poin_kasir(); }
+                    hold_transaksi(ket) => { root.hold_transaksi_kasir(ket); }
+                    recall_transaksi(id) => { root.recall_transaksi_kasir(id); }
+                    hapus_pending(id) => { root.hapus_pending_kasir(id); }
                 }
 
                 if root.active_view == 1: RiwayatView {

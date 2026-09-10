@@ -383,6 +383,7 @@ pub fn jalankan_migrasi(conn: &Connection) -> Result<()> {
         CREATE TABLE IF NOT EXISTS tcashflow (
             id TEXT PRIMARY KEY,
             cabang_id TEXT NOT NULL,
+            shift_id TEXT,
             tanggal TIMESTAMP NOT NULL,
             jenis TEXT NOT NULL,
             kategori TEXT NOT NULL,
@@ -396,6 +397,7 @@ pub fn jalankan_migrasi(conn: &Connection) -> Result<()> {
         CREATE TABLE IF NOT EXISTS tbiaya (
             id TEXT PRIMARY KEY,
             cabang_id TEXT NOT NULL,
+            shift_id TEXT,
             tanggal TIMESTAMP NOT NULL,
             kategori TEXT NOT NULL,
             nominal REAL NOT NULL,
@@ -403,8 +405,48 @@ pub fn jalankan_migrasi(conn: &Connection) -> Result<()> {
             operator_id TEXT NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
+
+        -- 23. Tabel Pending Kasir (tpenjualanpending - Hold/Recall Antrean)
+        CREATE TABLE IF NOT EXISTS tpenjualanpending (
+            id TEXT PRIMARY KEY,
+            cabang_id TEXT NOT NULL,
+            device_id TEXT NOT NULL,
+            shift_id TEXT NOT NULL,
+            faktur TEXT NOT NULL,
+            tanggal TIMESTAMP NOT NULL,
+            kode_pelanggan TEXT,
+            operator_id TEXT NOT NULL,
+            subtotal REAL NOT NULL DEFAULT 0.0,
+            diskon_rp REAL NOT NULL DEFAULT 0.0,
+            total_akhir REAL NOT NULL DEFAULT 0.0,
+            keterangan TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        -- 24. Tabel Detail Pending Kasir (tpenjualanpendingdetail)
+        CREATE TABLE IF NOT EXISTS tpenjualanpendingdetail (
+            id TEXT PRIMARY KEY,
+            pending_id TEXT NOT NULL,
+            cabang_id TEXT NOT NULL,
+            barang_id TEXT NOT NULL,
+            kode_barang TEXT NOT NULL,
+            nama_barang TEXT NOT NULL,
+            jumlah REAL NOT NULL,
+            satuan TEXT NOT NULL,
+            hargajual REAL NOT NULL,
+            hargapokok REAL NOT NULL DEFAULT 0.0,
+            diskon_persen REAL NOT NULL DEFAULT 0.0,
+            diskon_rp REAL NOT NULL DEFAULT 0.0,
+            subtotal REAL NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(pending_id) REFERENCES tpenjualanpending(id) ON DELETE CASCADE
+        );
         "#,
     )?;
+
+    // Migrasi defensif untuk database yang sudah ada sebelumnya
+    let _ = conn.execute("ALTER TABLE tcashflow ADD COLUMN shift_id TEXT;", []);
+    let _ = conn.execute("ALTER TABLE tbiaya ADD COLUMN shift_id TEXT;", []);
 
     Ok(())
 }

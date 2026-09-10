@@ -1,5 +1,7 @@
 # Spesifikasi Skema Database — POS (untuk Development Agent)
 
+> Nama proyek: **FAZPOS**. "iB Retago 5" yang disebut di dokumen ini adalah SISTEM LAMA yang digantikan/di-import datanya — bukan nama proyek baru.
+
 Dokumen ini adalah acuan teknis skema database. **Nama tabel & nama kolom
 mengikuti sistem lama (iB Retago 5)** agar 1:1 dengan modul Import Legacy SQL
 (lihat Plan bagian 5). Yang BARU hanya: kolom ekstensi arsitektur (cabang,

@@ -189,3 +189,111 @@ impl TPenjualan {
         (header, details)
     }
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct TPenjualanPending {
+    pub id: String,
+    pub cabang_id: String,
+    pub device_id: String,
+    pub shift_id: String,
+    pub faktur: String,
+    pub tanggal: DateTime<Utc>,
+    pub kode_pelanggan: Option<String>,
+    pub operator_id: String,
+    pub subtotal: f64,
+    pub diskon_rp: f64,
+    pub total_akhir: f64,
+    pub keterangan: Option<String>,
+    pub created_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct TPenjualanPendingDetail {
+    pub id: String,
+    pub pending_id: String,
+    pub cabang_id: String,
+    pub barang_id: String,
+    pub kode_barang: String,
+    pub nama_barang: String,
+    pub jumlah: f64,
+    pub satuan: String,
+    pub hargajual: f64,
+    pub hargapokok: f64,
+    pub diskon_persen: f64,
+    pub diskon_rp: f64,
+    pub subtotal: f64,
+    pub created_at: Option<DateTime<Utc>>,
+}
+
+impl TPenjualanPending {
+    pub fn buat_pending(
+        cabang_id: impl Into<String>,
+        device_id: impl Into<String>,
+        shift_id: impl Into<String>,
+        faktur: impl Into<String>,
+        operator_id: impl Into<String>,
+        kode_pelanggan: Option<String>,
+        items: &[KeranjangItem],
+        keterangan: Option<String>,
+    ) -> (Self, Vec<TPenjualanPendingDetail>) {
+        let cabang_id = cabang_id.into();
+        let pending_id = Uuid::new_v4().to_string();
+        let now = Utc::now();
+
+        let subtotal: f64 = items.iter().map(|i| i.subtotal).sum();
+        let header = Self {
+            id: pending_id.clone(),
+            cabang_id: cabang_id.clone(),
+            device_id: device_id.into(),
+            shift_id: shift_id.into(),
+            faktur: faktur.into(),
+            tanggal: now,
+            kode_pelanggan,
+            operator_id: operator_id.into(),
+            subtotal,
+            diskon_rp: 0.0,
+            total_akhir: subtotal,
+            keterangan,
+            created_at: Some(now),
+        };
+
+        let details = items
+            .iter()
+            .map(|item| TPenjualanPendingDetail {
+                id: Uuid::new_v4().to_string(),
+                pending_id: pending_id.clone(),
+                cabang_id: cabang_id.clone(),
+                barang_id: item.barang_id.clone(),
+                kode_barang: item.kode_barang.clone(),
+                nama_barang: item.nama_barang.clone(),
+                jumlah: item.jumlah,
+                satuan: item.satuan.clone(),
+                hargajual: item.hargajual,
+                hargapokok: item.hargapokok,
+                diskon_persen: item.diskon_persen,
+                diskon_rp: item.diskon_rp,
+                subtotal: item.subtotal,
+                created_at: Some(now),
+            })
+            .collect();
+
+        (header, details)
+    }
+}
+
+impl From<&TPenjualanPendingDetail> for KeranjangItem {
+    fn from(d: &TPenjualanPendingDetail) -> Self {
+        Self {
+            barang_id: d.barang_id.clone(),
+            kode_barang: d.kode_barang.clone(),
+            nama_barang: d.nama_barang.clone(),
+            satuan: d.satuan.clone(),
+            hargajual: d.hargajual,
+            hargapokok: d.hargapokok,
+            jumlah: d.jumlah,
+            diskon_persen: d.diskon_persen,
+            diskon_rp: d.diskon_rp,
+            subtotal: d.subtotal,
+        }
+    }
+}

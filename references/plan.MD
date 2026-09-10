@@ -1,4 +1,4 @@
-# Plan Pengembangan Aplikasi POS — Tauri + Rust
+# Plan Pengembangan FAZPOS — Tauri + Rust
 
 ## 1. Ringkasan Proyek
 

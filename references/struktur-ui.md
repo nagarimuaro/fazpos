@@ -1,3 +1,5 @@
+//struktur-ui.md
+
 # Dokumentasi Komprehensif & Spesifikasi Fitur iB Retago 5 - RTG02
 
 Aplikasi **iB Retago 5 (Versi 5.2.210 - RTG02)** dikembangkan oleh iDea Brains sebagai software Point of Sale (POS), Manajemen Inventori, Keuangan, dan Pengendalian Usaha Retail, Grosir, Minimarket, serta Apotek.

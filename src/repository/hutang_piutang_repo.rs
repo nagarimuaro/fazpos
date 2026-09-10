@@ -136,4 +136,39 @@ impl<'a> HutangPiutangRepo<'a> {
         )?;
         Ok(())
     }
+
+    pub fn catat_piutang_baru(
+        &self,
+        cabang_id: &str,
+        faktur_jual: &str,
+        pelanggan_id: &str,
+        nama_pelanggan: &str,
+        tagihan_awal: f64,
+        telah_dibayar: f64,
+        jatuh_tempo: &str,
+        keterangan: &str,
+    ) -> Result<()> {
+        let sisa = (tagihan_awal - telah_dibayar).max(0.0);
+        let status = if sisa <= 0.0 { "lunas" } else { "belum_lunas" };
+        let id = uuid::Uuid::new_v4().to_string();
+
+        self.conn.execute(
+            r#"
+            INSERT INTO tpiutang (
+                id, cabang_id, faktur_jual, pelanggan_id, nama_pelanggan,
+                tanggal, jatuh_tempo, tagihan_awal, telah_dibayar, sisa,
+                status, keterangan, created_at, updated_at
+            ) VALUES (
+                ?1, ?2, ?3, ?4, ?5,
+                CURRENT_TIMESTAMP, ?6, ?7, ?8, ?9,
+                ?10, ?11, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+            );
+            "#,
+            params![
+                id, cabang_id, faktur_jual, pelanggan_id, nama_pelanggan,
+                jatuh_tempo, tagihan_awal, telah_dibayar, sisa, status, keterangan
+            ],
+        )?;
+        Ok(())
+    }
 }

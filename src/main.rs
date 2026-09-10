@@ -15,7 +15,9 @@ use fazpos::repository::buku_kas_repo::BukuKasRepo;
 use fazpos::repository::cabang_repo::CabangRepo;
 use fazpos::repository::hutang_piutang_repo::HutangPiutangRepo;
 use fazpos::repository::opname_repo::OpnameRepo;
+use fazpos::repository::pelanggan_repo::PelangganRepo;
 use fazpos::repository::pembelian_repo::{PembelianItem, PembelianRepo};
+use fazpos::repository::pending_repo::PendingRepo;
 use fazpos::repository::retur_repo::{ReturItem, ReturRepo};
 use fazpos::repository::shift_repo::ShiftRepo;
 use fazpos::repository::supplier_repo::{DSupplier, SupplierRepo};
@@ -66,6 +68,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
+    // Inisialisasi data antrean tertahan (pending) di kasir
+    muat_tabel_pending(&main_window, &db_ref.borrow(), &cabang_id, &device_id);
+
     let window_handle = main_window.as_weak();
 
     // ==========================================
@@ -79,6 +84,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut database = db_nav.borrow_mut();
         if let Some(win) = win_handle_nav.upgrade() {
             match view_idx {
+                0 => muat_tabel_pending(&win, &database, &cid_nav, &did_nav),
                 1 => muat_tabel_riwayat(&win, &database, &cid_nav),
                 2 => muat_tabel_retur(&win, &database, &cid_nav),
                 3 => muat_tabel_pembelian(&win, &database, &cid_nav),
@@ -127,6 +133,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let kasir_checkout = Rc::clone(&kasir_svc);
     let db_checkout = Rc::clone(&db_ref);
     let win_handle_checkout = window_handle.clone();
+    let cid_checkout = cabang_id.clone();
+    let did_checkout = device_id.clone();
     main_window.on_proses_bayar(move |tunai| {
         let mut svc = kasir_checkout.borrow_mut();
         let mut database = db_checkout.borrow_mut();
@@ -139,15 +147,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             return;
         }
 
-        let tunai_f64 = tunai as f64;
-        let kembalian = if tunai_f64 >= total { tunai_f64 - total } else { 0.0 };
+        let metode = if let Some(win) = win_handle_checkout.upgrade() {
+            win.get_kasir_metode_bayar().to_string()
+        } else {
+            "TUNAI".to_string()
+        };
 
-        match svc.checkout(&mut database, "OP01", tunai_f64, 0.0, 0.0, "TUNAI") {
+        let tunai_f64 = tunai as f64;
+        let total_setelah_potongan = (total - svc.nilai_tukar_poin).max(0.0);
+        let kembalian = if tunai_f64 >= total_setelah_potongan { tunai_f64 - total_setelah_potongan } else { 0.0 };
+
+        match svc.checkout(&mut database, "OP01", tunai_f64, 0.0, 0.0, &metode) {
             Ok(penjualan) => {
                 if let Some(win) = win_handle_checkout.upgrade() {
                     sinkronkan_tabel_kasir(&win, &svc);
                     win.set_kembalian(kembalian as f32);
-                    win.set_status_pesan(format!("Transaksi [{}] BERHASIL disimpan!", penjualan.faktur).into());
+                    win.set_status_pesan(format!("Transaksi [{}] ({}) BERHASIL disimpan!", penjualan.faktur, metode).into());
+                    muat_data_shift(&win, &database, &cid_checkout, &did_checkout);
                 }
             }
             Err(err) => {
@@ -166,6 +182,138 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if let Some(win) = win_handle_reset.upgrade() {
             sinkronkan_tabel_kasir(&win, &svc);
             win.set_status_pesan("Keranjang dibersihkan.".into());
+        }
+    });
+
+    // ==========================================
+    // CALLBACK: MEMBER & LOYALTY POIN KASIR
+    // ==========================================
+    let kasir_member = Rc::clone(&kasir_svc);
+    let db_member = Rc::clone(&db_ref);
+    let win_handle_member = window_handle.clone();
+    let cid_member = cabang_id.clone();
+    main_window.on_cari_member_kasir(move |q| {
+        let mut svc = kasir_member.borrow_mut();
+        let database = db_member.borrow();
+        let repo = PelangganRepo::new(database.conn());
+        if let Some(win) = win_handle_member.upgrade() {
+            match repo.cari_member(&cid_member, q.as_str()) {
+                Ok(list) if !list.is_empty() => {
+                    let member = list[0].clone();
+                    win.set_status_pesan(format!("Member [{}] terpasang.", member.nama).into());
+                    svc.attach_member(member);
+                    sinkronkan_tabel_kasir(&win, &svc);
+                }
+                _ => {
+                    win.set_status_pesan("Member tidak ditemukan.".into());
+                }
+            }
+        }
+    });
+
+    let kasir_lepas = Rc::clone(&kasir_svc);
+    let win_handle_lepas = window_handle.clone();
+    main_window.on_lepas_member_kasir(move || {
+        let mut svc = kasir_lepas.borrow_mut();
+        svc.detach_member();
+        if let Some(win) = win_handle_lepas.upgrade() {
+            sinkronkan_tabel_kasir(&win, &svc);
+            win.set_status_pesan("Member dilepas dari transaksi.".into());
+        }
+    });
+
+    let kasir_tukar = Rc::clone(&kasir_svc);
+    let db_tukar = Rc::clone(&db_ref);
+    let win_handle_tukar = window_handle.clone();
+    main_window.on_tukar_poin_kasir(move |poin| {
+        let mut svc = kasir_tukar.borrow_mut();
+        let database = db_tukar.borrow();
+        if let Some(win) = win_handle_tukar.upgrade() {
+            match svc.tukar_poin(&database, poin as i64) {
+                Ok(potongan) => {
+                    sinkronkan_tabel_kasir(&win, &svc);
+                    win.set_status_pesan(format!("Tukar poin berhasil! Potongan: Rp {}", potongan).into());
+                }
+                Err(e) => {
+                    win.set_status_pesan(format!("Gagal tukar poin: {}", e).into());
+                }
+            }
+        }
+    });
+
+    let kasir_batal_tukar = Rc::clone(&kasir_svc);
+    let db_batal_tukar = Rc::clone(&db_ref);
+    let win_handle_batal_tukar = window_handle.clone();
+    main_window.on_batal_tukar_poin_kasir(move || {
+        let mut svc = kasir_batal_tukar.borrow_mut();
+        let database = db_batal_tukar.borrow();
+        let _ = svc.tukar_poin(&database, 0);
+        if let Some(win) = win_handle_batal_tukar.upgrade() {
+            sinkronkan_tabel_kasir(&win, &svc);
+            win.set_status_pesan("Penukaran poin dibatalkan.".into());
+        }
+    });
+
+    // ==========================================
+    // CALLBACK: PENDING ANTREAN (HOLD & RECALL)
+    // ==========================================
+    let kasir_hold = Rc::clone(&kasir_svc);
+    let db_hold = Rc::clone(&db_ref);
+    let win_handle_hold = window_handle.clone();
+    let cid_hold = cabang_id.clone();
+    let did_hold = device_id.clone();
+    main_window.on_hold_transaksi_kasir(move |ket| {
+        let mut svc = kasir_hold.borrow_mut();
+        let database = db_hold.borrow();
+        if let Some(win) = win_handle_hold.upgrade() {
+            let ket_s = ket.to_string();
+            let ket_opt = if ket_s.trim().is_empty() { None } else { Some(ket_s) };
+            match svc.hold_transaksi(&database, "OP01", ket_opt) {
+                Ok(faktur) => {
+                    sinkronkan_tabel_kasir(&win, &svc);
+                    muat_tabel_pending(&win, &database, &cid_hold, &did_hold);
+                    win.set_status_pesan(format!("Antrean berhasil ditahan [{}]", faktur).into());
+                }
+                Err(e) => {
+                    win.set_status_pesan(format!("Gagal tahan antrean: {}", e).into());
+                }
+            }
+        }
+    });
+
+    let kasir_recall = Rc::clone(&kasir_svc);
+    let db_recall = Rc::clone(&db_ref);
+    let win_handle_recall = window_handle.clone();
+    let cid_recall = cabang_id.clone();
+    let did_recall = device_id.clone();
+    main_window.on_recall_transaksi_kasir(move |pid| {
+        let mut svc = kasir_recall.borrow_mut();
+        let database = db_recall.borrow();
+        if let Some(win) = win_handle_recall.upgrade() {
+            match svc.recall_transaksi(&database, pid.as_str()) {
+                Ok(_) => {
+                    sinkronkan_tabel_kasir(&win, &svc);
+                    muat_tabel_pending(&win, &database, &cid_recall, &did_recall);
+                    win.set_status_pesan("Antrean berhasil dipanggil kembali ke keranjang!".into());
+                }
+                Err(e) => {
+                    win.set_status_pesan(format!("Gagal panggil antrean: {}", e).into());
+                }
+            }
+        }
+    });
+
+    let db_del_pending = Rc::clone(&db_ref);
+    let win_handle_del_pending = window_handle.clone();
+    let cid_del_pending = cabang_id.clone();
+    let did_del_pending = device_id.clone();
+    main_window.on_hapus_pending_kasir(move |pid| {
+        let database = db_del_pending.borrow();
+        let repo = PendingRepo::new(database.conn());
+        if let Some(win) = win_handle_del_pending.upgrade() {
+            let _ = repo.hapus_pending(pid.as_str());
+            muat_tabel_pending(&win, &database, &cid_del_pending, &did_del_pending);
+            win.set_status_pesan("Antrean tertahan berhasil dihapus.".into());
         }
     });
 
@@ -867,6 +1015,39 @@ fn sinkronkan_tabel_kasir(win: &MainWindow, svc: &KasirService) {
 
     win.set_cart_items(ModelRc::from(Rc::new(VecModel::from(slint_items))));
     win.set_total_belanja(svc.total_belanja() as f32);
+    win.set_nilai_tukar_poin(svc.nilai_tukar_poin as f32);
+
+    if let Some(m) = &svc.member_terpilih {
+        win.set_member_nama(m.nama.clone().into());
+        win.set_member_kode(m.kode.clone().into());
+        win.set_member_poin_saldo(m.poin_saldo as i32);
+        win.set_is_member_attached(true);
+    } else {
+        win.set_member_nama("UMUM (Non-Member)".into());
+        win.set_member_kode("UMUM".into());
+        win.set_member_poin_saldo(0);
+        win.set_is_member_attached(false);
+    }
+}
+
+/// Helper muat daftar transaksi yang di-hold (antrean pending)
+fn muat_tabel_pending(win: &MainWindow, db: &Database, cabang_id: &str, device_id: &str) {
+    let repo = PendingRepo::new(db.conn());
+    if let Ok(list) = repo.semua_pending(cabang_id, device_id) {
+        let items: Vec<PendingGridData> = list
+            .into_iter()
+            .map(|p| PendingGridData {
+                id: p.id.into(),
+                faktur: p.faktur.into(),
+                tanggal: p.tanggal.format("%Y-%m-%d %H:%M").to_string().into(),
+                pelanggan: p.kode_pelanggan.unwrap_or_else(|| "-".to_string()).into(),
+                total: p.total_akhir as f32,
+                keterangan: p.keterangan.unwrap_or_else(|| "-".to_string()).into(),
+            })
+            .collect();
+
+        win.set_pending_items(ModelRc::from(Rc::new(VecModel::from(items))));
+    }
 }
 
 /// Helper muat data master barang ke tabel (sesuai Screenshot 1)
