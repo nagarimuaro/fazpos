@@ -11,7 +11,38 @@ impl<'a> BarangRepo<'a> {
     }
 
     /// Simpan atau update barang (UPSERT berbasis cabang_id & kode)
+    /// Otomatis mencatat histori ke `perubahanharga` jika harga pokok atau jual berubah (Aturan 5 SKILL.MD)
     pub fn simpan(&self, b: &DBarang) -> Result<()> {
+        let existing: Option<(String, f64, f64)> = self
+            .conn
+            .query_row(
+                "SELECT id, hargapokok, hargajual1 FROM dbarang WHERE cabang_id = ?1 AND kode = ?2 LIMIT 1;",
+                params![b.cabang_id, b.kode],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .optional()?;
+
+        if let Some((barang_id, hpp_lama, jual_lama)) = existing {
+            if (b.hargapokok - hpp_lama).abs() > 0.001 || (b.hargajual1 - jual_lama).abs() > 0.001 {
+                let log_id = uuid::Uuid::new_v4().to_string();
+                let now = chrono::Utc::now().to_rfc3339();
+                let _ = self.conn.execute(
+                    r#"
+                    INSERT INTO perubahanharga (
+                        id, cabang_id, barang_id, tanggal, operator_id,
+                        hargapokok_lama, hargapokok_baru, hargajual1_lama, hargajual1_baru,
+                        keterangan, sync_status, created_at
+                    ) VALUES (
+                        ?1, ?2, ?3, ?4, 'SISTEM',
+                        ?5, ?6, ?7, ?8,
+                        'Update harga produk', 'pending', CURRENT_TIMESTAMP
+                    );
+                    "#,
+                    params![log_id, b.cabang_id, barang_id, now, hpp_lama, b.hargapokok, jual_lama, b.hargajual1],
+                );
+            }
+        }
+
         self.conn.execute(
             r#"
             INSERT INTO dbarang (

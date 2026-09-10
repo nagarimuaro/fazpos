@@ -1,0 +1,8 @@
+{
+  "servers": {
+    "codegraph": {
+      "command": "codegraph-mcp",
+      "args": ["--workspace", "${workspaceFolder}"]
+    }
+  }
+}

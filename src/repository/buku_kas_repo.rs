@@ -37,26 +37,39 @@ impl<'a> BukuKasRepo<'a> {
         keterangan: &str,
         operator_id: &str,
     ) -> Result<()> {
+        self.catat_arus_kas_dengan_shift(cabang_id, None, jenis, kategori, nominal, keterangan, operator_id)
+    }
+
+    pub fn catat_arus_kas_dengan_shift(
+        &self,
+        cabang_id: &str,
+        shift_id: Option<&str>,
+        jenis: &str,
+        kategori: &str,
+        nominal: f64,
+        keterangan: &str,
+        operator_id: &str,
+    ) -> Result<()> {
         let id = Uuid::new_v4().to_string();
         let now = Utc::now().to_rfc3339();
 
         self.conn.execute(
             r#"
-            INSERT INTO tcashflow (id, cabang_id, tanggal, jenis, kategori, nominal, keterangan, operator_id)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8);
+            INSERT INTO tcashflow (id, cabang_id, shift_id, tanggal, jenis, kategori, nominal, keterangan, operator_id)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9);
             "#,
-            params![id, cabang_id, now, jenis, kategori, nominal, keterangan, operator_id],
+            params![id, cabang_id, shift_id, now, jenis, kategori, nominal, keterangan, operator_id],
         )?;
 
-        // Jika KELUAR, masukkan juga ke tbiaya
+        // Jika KELUAR, masukkan juga ke tbiaya (dengan shift_id)
         if jenis == "KELUAR" {
             let biaya_id = Uuid::new_v4().to_string();
             self.conn.execute(
                 r#"
-                INSERT INTO tbiaya (id, cabang_id, tanggal, kategori, nominal, keterangan, operator_id)
-                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7);
+                INSERT INTO tbiaya (id, cabang_id, shift_id, tanggal, kategori, nominal, keterangan, operator_id)
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8);
                 "#,
-                params![biaya_id, cabang_id, now, kategori, nominal, keterangan, operator_id],
+                params![biaya_id, cabang_id, shift_id, now, kategori, nominal, keterangan, operator_id],
             )?;
         }
 

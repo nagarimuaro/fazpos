@@ -441,12 +441,150 @@ pub fn jalankan_migrasi(conn: &Connection) -> Result<()> {
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY(pending_id) REFERENCES tpenjualanpending(id) ON DELETE CASCADE
         );
+
+        -- 25. Tabel Master Sales (dsales)
+        CREATE TABLE IF NOT EXISTS dsales (
+            id TEXT PRIMARY KEY,
+            cabang_id TEXT NOT NULL,
+            kode TEXT NOT NULL,
+            nama TEXT NOT NULL,
+            alamat TEXT,
+            no_hp TEXT,
+            email TEXT,
+            rekening TEXT,
+            keterangan TEXT,
+            sync_status TEXT DEFAULT 'pending',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(cabang_id, kode)
+        );
+
+        -- 26. Tabel Master Karyawan (dkaryawan)
+        CREATE TABLE IF NOT EXISTS dkaryawan (
+            id TEXT PRIMARY KEY,
+            cabang_id TEXT NOT NULL,
+            kode TEXT NOT NULL,
+            nama TEXT NOT NULL,
+            alamat TEXT,
+            no_hp TEXT,
+            email TEXT,
+            rekening TEXT,
+            keterangan TEXT,
+            sync_status TEXT DEFAULT 'pending',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(cabang_id, kode)
+        );
+
+        -- 27. Tabel Retur Pembelian Header (treturpembelian)
+        CREATE TABLE IF NOT EXISTS treturpembelian (
+            id TEXT PRIMARY KEY,
+            cabang_id TEXT NOT NULL,
+            device_id TEXT NOT NULL,
+            shift_id TEXT,
+            no_retur TEXT NOT NULL,
+            faktur_pembelian TEXT NOT NULL,
+            suplier_id TEXT,
+            nama_suplier TEXT,
+            tanggal TIMESTAMP NOT NULL,
+            total_retur REAL NOT NULL DEFAULT 0,
+            keterangan TEXT,
+            operator_id TEXT NOT NULL,
+            sync_status TEXT DEFAULT 'pending',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(cabang_id, no_retur)
+        );
+
+        -- 28. Tabel Detail Retur Pembelian (treturpembeliandetail)
+        CREATE TABLE IF NOT EXISTS treturpembeliandetail (
+            id TEXT PRIMARY KEY,
+            retur_id TEXT NOT NULL,
+            cabang_id TEXT NOT NULL,
+            barang_id TEXT NOT NULL,
+            kode_barang TEXT NOT NULL,
+            nama_barang TEXT NOT NULL,
+            jumlah REAL NOT NULL,
+            satuan TEXT NOT NULL,
+            hargabeli REAL NOT NULL,
+            subtotal REAL NOT NULL,
+            sync_status TEXT DEFAULT 'pending',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(retur_id) REFERENCES treturpembelian(id) ON DELETE CASCADE
+        );
+
+        -- 29. Tabel Pending Pembelian (tpembelianpending)
+        CREATE TABLE IF NOT EXISTS tpembelianpending (
+            id TEXT PRIMARY KEY,
+            cabang_id TEXT NOT NULL,
+            device_id TEXT NOT NULL,
+            faktur TEXT NOT NULL,
+            tanggal TIMESTAMP NOT NULL,
+            suplier_id TEXT,
+            operator_id TEXT NOT NULL,
+            subtotal REAL NOT NULL DEFAULT 0.0,
+            diskon_rp REAL NOT NULL DEFAULT 0.0,
+            total_akhir REAL NOT NULL DEFAULT 0.0,
+            keterangan TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(cabang_id, faktur)
+        );
+
+        -- 30. Tabel Detail Pending Pembelian (tpembelianpendingdetail)
+        CREATE TABLE IF NOT EXISTS tpembelianpendingdetail (
+            id TEXT PRIMARY KEY,
+            pending_id TEXT NOT NULL,
+            cabang_id TEXT NOT NULL,
+            barang_id TEXT NOT NULL,
+            kode_barang TEXT NOT NULL,
+            nama_barang TEXT NOT NULL,
+            jumlah REAL NOT NULL,
+            satuan TEXT NOT NULL,
+            hargabeli REAL NOT NULL,
+            subtotal REAL NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(pending_id) REFERENCES tpembelianpending(id) ON DELETE CASCADE
+        );
+
+        -- 31. Tabel Konfigurasi Aplikasi Cabang (daplikasi)
+        CREATE TABLE IF NOT EXISTS daplikasi (
+            id TEXT PRIMARY KEY,
+            cabang_id TEXT NOT NULL UNIQUE,
+            nama_toko TEXT NOT NULL DEFAULT 'Toko Ritel',
+            alamat TEXT,
+            telepon TEXT,
+            header_struk TEXT,
+            footer_struk TEXT,
+            printer_default TEXT,
+            lebar_struk_mm INTEGER DEFAULT 58,
+            sync_status TEXT DEFAULT 'pending',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        -- 32. Tabel Konfigurasi Penomoran Otomatis (autokode)
+        CREATE TABLE IF NOT EXISTS autokode (
+            id TEXT PRIMARY KEY,
+            cabang_id TEXT NOT NULL,
+            tabel TEXT NOT NULL,
+            prefix TEXT NOT NULL,
+            panjang_nomor INTEGER NOT NULL DEFAULT 6,
+            counter_terakhir INTEGER NOT NULL DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(cabang_id, tabel)
+        );
         "#,
     )?;
 
     // Migrasi defensif untuk database yang sudah ada sebelumnya
     let _ = conn.execute("ALTER TABLE tcashflow ADD COLUMN shift_id TEXT;", []);
     let _ = conn.execute("ALTER TABLE tbiaya ADD COLUMN shift_id TEXT;", []);
+    let _ = conn.execute("ALTER TABLE tshift ADD COLUMN total_kas_masuk_lain REAL DEFAULT 0;", []);
+    let _ = conn.execute("ALTER TABLE tshift ADD COLUMN total_kas_keluar REAL DEFAULT 0;", []);
+    let _ = conn.execute("ALTER TABLE tshift ADD COLUMN total_retur_tunai REAL DEFAULT 0;", []);
+    let _ = conn.execute("ALTER TABLE tshift ADD COLUMN kode TEXT;", []);
 
     Ok(())
 }
