@@ -110,6 +110,11 @@ mulai task apa pun:
 - Kalau fitur ada di KATEGORI 4, kerjakan sesuai urutan prioritas/fase yang
   tercantum di sana, bukan asal pilih
 
+### 10. Alur CodeGraph: Query Sebelum Eksekusi, Sync Setelah Selesai
+CodeGraph (`@astudioplus/codegraph-mcp`) sudah terpasang dan aktif di repo ini:
+- **Sebelum eksekusi:** Wajib query konteks dari index CodeGraph (`codegraph_symbol_search`, `codegraph_get_symbol_info`, call graph, dll) untuk eksplorasi cepat & hemat token sebelum mengubah berkas.
+- **Setelah selesai:** Wajib jalankan sync/reindex CodeGraph pada berkas/simbol yang baru dibuat/diubah agar index graph lokal selalu mutakhir untuk tugas berikutnya.
+
 ---
 
 ## WAJIB TEST setiap selesai membuat/mengubah sesuatu
@@ -141,7 +146,8 @@ berikutnya sebelum yang barusan dikerjakan sudah diverifikasi jalan.**
    KATEGORI 2 atau 4, pindahkan ke KATEGORI 1 dengan detail file backend/UI
    sebenarnya, dan update status roadmap fase terkait (lihat
    `progres-pengerjaan.md` §3 untuk detail cara update-nya).
-7. **Laporkan hasil test ke user secara eksplisit** — jangan cuma bilang
+7. **Sync index CodeGraph** — jalankan sync/reindex CodeGraph pada berkas/simbol yang diubah agar graph simbol dan relasi tetap mutakhir.
+8. **Laporkan hasil test ke user secara eksplisit** — jangan cuma bilang
    "sudah saya buat", tapi sertakan ringkasan hasil test: apa yang dites,
    lolos/gagal, dan kalau gagal, apa yang masih perlu diperbaiki.
 
@@ -161,30 +167,17 @@ langsung dipindah ke KATEGORI 1 sebelum benar-benar tuntas).
 
 ---
 
-## Pakai CodeGraph Kalau Tersedia
+## Pakai CodeGraph (Wajib Aktif)
 
-Proyek ini menetapkan **CodeGraph** (`codegraph-ai/CodeGraph` —
-https://github.com/codegraph-ai/CodeGraph) sebagai tool code-graph pilihan,
-BUKAN Graphify atau varian "CodeGraph" lain dari repo berbeda (ada beberapa
-proyek tak berhubungan yang kebetulan pakai nama sama — pastikan yang
-dipasang adalah `codegraph-ai/CodeGraph`).
+Proyek ini menetapkan **CodeGraph** (`@astudioplus/codegraph-mcp` / `codegraph-ai/CodeGraph`)
+sebagai tool code-graph utama dan **sudah terpasang serta aktif** di mesin lokal.
 
-Kalau CodeGraph MCP server sudah terkoneksi di sesi ini, **gunakan itu
-DULUAN** sebelum grep manual/baca banyak file satu-satu untuk pertanyaan
-seperti:
-- "Fungsi/modul ini dipanggil dari mana saja?" → pakai call graph tool
-- "Kalau saya ubah struct/fungsi ini, apa yang berpotensi rusak?" (penting
-  banget di FAZPOS karena tabel & struct saling terhubung erat lewat
-  `cabang_id`/`shift_id`/FK longgar — lihat `skema-database.md` §11) →
-  pakai impact analysis tool
-- "Apa saja yang bergantung pada modul X?" → pakai dependency graph tool
-- "Kasih saya context relevan sebelum saya modif fitur Y" → pakai
-  AI-optimized context tool CodeGraph
-
-Kalau CodeGraph BELUM terpasang di environment saat ini, lanjutkan pakai
-grep/baca file seperti biasa — jangan blokir pekerjaan karena tool ini
-absen. Jangan install/setup CodeGraph atas inisiatif sendiri tanpa
-konfirmasi user dulu (perlu setup MCP server terpisah di mesin user).
+**Aturan Siklus Kerja CodeGraph:**
+1. **Query Dulu Sebelum Eksekusi:** Gunakan tool CodeGraph DULUAN (`codegraph_symbol_search`,
+   `codegraph_get_symbol_info`, `codegraph_get_call_graph`, `codegraph_get_ai_context`)
+   untuk mencari simbol, relasi pemanggilan, dan dependensi sebelum membaca banyak file atau mengedit kode.
+2. **Sync Setelah Selesai:** Setiap kali selesai mengedit atau menambah kode baru dan test lolos,
+   wajib jalankan sync/reindex CodeGraph (`codegraph_index_files` / reindex) agar graph lokal selalu mutakhir.
 
 ---
 
