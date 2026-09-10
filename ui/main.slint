@@ -33,8 +33,10 @@ export {
 
 export component MainWindow inherits Window {
     title: "FAZPOS — Sistem Kasir & Manajemen Toko Ritel Grosir";
-    min-width: 1280px;
-    min-height: 800px;
+    min-width: 1024px;
+    min-height: 640px;
+    preferred-width: 1366px;
+    preferred-height: 768px;
     background: AppStyle.bg;
     default-font-family: "Segoe UI, sans-serif";
 
@@ -107,14 +109,20 @@ export component MainWindow inherits Window {
     in-out property <string> license_status_text: "BELUM AKTIVASI";
     in-out property <string> license_toko: "-";
 
-    // Fullscreen & Interaktivitas Popup Modal
-    in-out property <bool> is_fullscreen: true;
+    // Window State & Maximized / Minimized / Fullscreen
+    in-out property <bool> is_maximized: true;
+    in-out property <bool> is_fullscreen: false;
     in-out property <bool> show_modal_sukses: false;
     in-out property <string> sukses_faktur: "";
     in-out property <float> sukses_total: 0.0;
     in-out property <float> sukses_bayar: 0.0;
     in-out property <float> sukses_kembalian: 0.0;
     in-out property <bool> show_modal_help: false;
+
+    // Callbacks Window
+    callback minimize_window();
+    callback toggle_maximize_window();
+    callback close_window();
 
     // Callbacks Navigasi & Bisnis
     callback navigasi(int);
@@ -183,12 +191,21 @@ export component MainWindow inherits Window {
                     spacing: 8px;
                     alignment: start;
 
-                    // Window Accent Dots
+                    // Window Accent Controls (Close, Minimize, Maximize/Restore)
                     HorizontalLayout {
-                        spacing: 5px; alignment: center;
-                        Rectangle { width: 10px; height: 10px; border-radius: 5px; background: #ef4444; }
-                        Rectangle { width: 10px; height: 10px; border-radius: 5px; background: #f59e0b; }
-                        Rectangle { width: 10px; height: 10px; border-radius: 5px; background: #10b981; }
+                        spacing: 6px; alignment: center;
+                        Rectangle {
+                            width: 11px; height: 11px; border-radius: 5px; background: #ef4444;
+                            TouchArea { clicked => { root.close_window(); } }
+                        }
+                        Rectangle {
+                            width: 11px; height: 11px; border-radius: 5px; background: #f59e0b;
+                            TouchArea { clicked => { root.minimize_window(); } }
+                        }
+                        Rectangle {
+                            width: 11px; height: 11px; border-radius: 5px; background: #10b981;
+                            TouchArea { clicked => { root.toggle_maximize_window(); } }
+                        }
                     }
 
                     Rectangle { width: 1px; height: 16px; background: AppStyle.header-border; }
@@ -395,12 +412,12 @@ export component MainWindow inherits Window {
                         }
                     }
 
-                    // Fullscreen Toggle
+                    // Maximize / Restore Toggle Button
                     Rectangle {
                         height: 22px; width: 22px; border-radius: 2px;
                         background: AppStyle.header-border;
-                        TouchArea { clicked => { root.toggle_fullscreen(); } }
-                        Text { text: root.is_fullscreen ? "🗗" : "⛶"; font-size: 11px; color: #ffffff; horizontal-alignment: center; vertical-alignment: center; }
+                        TouchArea { clicked => { root.toggle_maximize_window(); } }
+                        Text { text: root.is_maximized ? "🗗" : "🗖"; font-size: 11px; color: #ffffff; horizontal-alignment: center; vertical-alignment: center; }
                     }
                 }
             }

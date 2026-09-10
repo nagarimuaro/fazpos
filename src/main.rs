@@ -48,10 +48,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 4. Inisialisasi Kasir Service
     let kasir_svc = Rc::new(RefCell::new(KasirService::new(cabang_id.clone(), device_id.clone())));
 
-    // 5. Inisialisasi UI Slint (Fullscreen Mode Default)
+    // 5. Inisialisasi UI Slint (Ukuran Default Layar Penuh Ter-maksimalkan / Maximized)
     let main_window = MainWindow::new()?;
-    main_window.window().set_fullscreen(true);
-    main_window.set_is_fullscreen(true);
+    main_window.window().set_maximized(true);
+    main_window.set_is_maximized(true);
     main_window.set_toko_nama("Nama Ritel Grosir".into());
     main_window.set_operator_nama("Operator : Master".into());
     main_window.set_shift_status(format!("SHIFT: {}", &shift_aktif.id[..8]).into());
@@ -185,14 +185,37 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     // ==========================================
-    // CALLBACK: TOGGLE FULLSCREEN & CETAK STRUK POPUP
+    // CALLBACK: WINDOW CONTROLS (MINIMIZE, MAXIMIZE, CLOSE)
     // ==========================================
+    let win_handle_min = window_handle.clone();
+    main_window.on_minimize_window(move || {
+        if let Some(win) = win_handle_min.upgrade() {
+            let _ = win.window().set_minimized(true);
+        }
+    });
+
+    let win_handle_max = window_handle.clone();
+    main_window.on_toggle_maximize_window(move || {
+        if let Some(win) = win_handle_max.upgrade() {
+            let is_max = win.window().is_maximized();
+            win.window().set_maximized(!is_max);
+            win.set_is_maximized(!is_max);
+        }
+    });
+
+    let win_handle_close = window_handle.clone();
+    main_window.on_close_window(move || {
+        if let Some(win) = win_handle_close.upgrade() {
+            let _ = win.hide();
+        }
+    });
+
     let win_handle_fs = window_handle.clone();
     main_window.on_toggle_fullscreen(move || {
         if let Some(win) = win_handle_fs.upgrade() {
-            let is_fs = win.window().is_fullscreen();
-            win.window().set_fullscreen(!is_fs);
-            win.set_is_fullscreen(!is_fs);
+            let is_max = win.window().is_maximized();
+            win.window().set_maximized(!is_max);
+            win.set_is_maximized(!is_max);
         }
     });
 
