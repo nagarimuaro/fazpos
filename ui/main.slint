@@ -215,139 +215,283 @@ export component MainWindow inherits Window {
         }
 
         // =========================================================================
-        // BODY: SIDEBAR KIRI (NON-TAB) + WORKSPACE KANAN
+        // TOP MODULE RIBBON / TOOLSTRIP BAR (iPos / iB Apotek Style — No Sidebar)
         // =========================================================================
-        HorizontalLayout {
-            spacing: 0px;
-            vertical-stretch: 1;
+        Rectangle {
+            height: 44px;
+            background: AppStyle.surface;
+            border-width: 1px;
+            border-color: AppStyle.border;
 
-            // SIDEBAR NAVIGASI KIRI (Width: 215px, Clean Light Style)
-            Rectangle {
-                width: AppStyle.sidebar-width;
-                background: AppStyle.surface;
-                border-width: 1px;
-                border-color: AppStyle.border;
+            HorizontalLayout {
+                padding-left: AppStyle.space-sm;
+                padding-right: AppStyle.space-sm;
+                padding-top: 4px;
+                padding-bottom: 4px;
+                spacing: 4px;
+                alignment: start;
 
-                VerticalLayout {
-                    padding: AppStyle.space-sm;
-                    spacing: 2px;
-                    alignment: start;
+                // [F1] Kasir POS
+                Rectangle {
+                    border-radius: 4px;
+                    background: root.active_view == 0 ? AppStyle.primary-light : AppStyle.surface;
+                    border-width: 1px;
+                    border-color: root.active_view == 0 ? AppStyle.primary : AppStyle.border;
+                    TouchArea { clicked => { root.active_view = 0; root.navigasi(0); } }
+                    HorizontalLayout {
+                        padding-left: 6px; padding-right: 8px; spacing: 4px; alignment: center;
+                        Rectangle {
+                            width: 22px; height: 18px; border-radius: 2px;
+                            background: root.active_view == 0 ? AppStyle.primary : AppStyle.bg;
+                            border-width: 1px; border-color: root.active_view == 0 ? AppStyle.primary-dark : AppStyle.border;
+                            Text { text: "F1"; font-size: 9px; font-weight: 800; color: root.active_view == 0 ? #ffffff : AppStyle.text-muted; horizontal-alignment: center; vertical-alignment: center; }
+                        }
+                        Text { text: "Kasir POS"; font-size: AppStyle.font-xs; font-weight: root.active_view == 0 ? 800 : 600; color: root.active_view == 0 ? AppStyle.primary-dark : AppStyle.text-primary; vertical-alignment: center; }
+                    }
+                }
 
-                    // Group: TRANSAKSI
-                    HorizontalLayout { padding-left: 8px; padding-top: 4px; padding-bottom: 2px; Text { text: "TRANSAKSI KASIR"; font-size: 10px; font-weight: 800; color: AppStyle.text-muted; } }
-                    Rectangle {
-                        height: AppStyle.row-height-dense; border-radius: 4px;
-                        background: root.active_view == 0 ? AppStyle.primary-light : transparent;
-                        border-width: root.active_view == 0 ? 1px : 0px; border-color: AppStyle.primary-border;
-                        TouchArea { clicked => { root.active_view = 0; root.navigasi(0); } }
-                        HorizontalLayout { padding-left: 10px; Text { text: "Kasir POS"; font-size: AppStyle.font-sm; font-weight: root.active_view == 0 ? 700 : 500; color: root.active_view == 0 ? AppStyle.primary-dark : AppStyle.text-secondary; vertical-alignment: center; } }
+                // [F2] Riwayat Penjualan
+                Rectangle {
+                    border-radius: 4px;
+                    background: root.active_view == 1 ? AppStyle.primary-light : AppStyle.surface;
+                    border-width: 1px;
+                    border-color: root.active_view == 1 ? AppStyle.primary : AppStyle.border;
+                    TouchArea { clicked => { root.active_view = 1; root.navigasi(1); } }
+                    HorizontalLayout {
+                        padding-left: 6px; padding-right: 8px; spacing: 4px; alignment: center;
+                        Rectangle {
+                            width: 22px; height: 18px; border-radius: 2px;
+                            background: root.active_view == 1 ? AppStyle.primary : AppStyle.bg;
+                            border-width: 1px; border-color: root.active_view == 1 ? AppStyle.primary-dark : AppStyle.border;
+                            Text { text: "F2"; font-size: 9px; font-weight: 800; color: root.active_view == 1 ? #ffffff : AppStyle.text-muted; horizontal-alignment: center; vertical-alignment: center; }
+                        }
+                        Text { text: "Riwayat"; font-size: AppStyle.font-xs; font-weight: root.active_view == 1 ? 800 : 600; color: root.active_view == 1 ? AppStyle.primary-dark : AppStyle.text-primary; vertical-alignment: center; }
                     }
-                    Rectangle {
-                        height: AppStyle.row-height-dense; border-radius: 4px;
-                        background: root.active_view == 1 ? AppStyle.primary-light : transparent;
-                        border-width: root.active_view == 1 ? 1px : 0px; border-color: AppStyle.primary-border;
-                        TouchArea { clicked => { root.active_view = 1; root.navigasi(1); } }
-                        HorizontalLayout { padding-left: 10px; Text { text: "Riwayat Penjualan"; font-size: AppStyle.font-sm; font-weight: root.active_view == 1 ? 700 : 500; color: root.active_view == 1 ? AppStyle.primary-dark : AppStyle.text-secondary; vertical-alignment: center; } }
-                    }
-                    Rectangle {
-                        height: AppStyle.row-height-dense; border-radius: 4px;
-                        background: root.active_view == 2 ? AppStyle.primary-light : transparent;
-                        border-width: root.active_view == 2 ? 1px : 0px; border-color: AppStyle.primary-border;
-                        TouchArea { clicked => { root.active_view = 2; root.navigasi(2); } }
-                        HorizontalLayout { padding-left: 10px; Text { text: "Retur Penjualan"; font-size: AppStyle.font-sm; font-weight: root.active_view == 2 ? 700 : 500; color: root.active_view == 2 ? AppStyle.primary-dark : AppStyle.text-secondary; vertical-alignment: center; } }
-                    }
-                    Rectangle {
-                        height: AppStyle.row-height-dense; border-radius: 4px;
-                        background: root.active_view == 3 ? AppStyle.primary-light : transparent;
-                        border-width: root.active_view == 3 ? 1px : 0px; border-color: AppStyle.primary-border;
-                        TouchArea { clicked => { root.active_view = 3; root.navigasi(3); } }
-                        HorizontalLayout { padding-left: 10px; Text { text: "Pembelian Supplier"; font-size: AppStyle.font-sm; font-weight: root.active_view == 3 ? 700 : 500; color: root.active_view == 3 ? AppStyle.primary-dark : AppStyle.text-secondary; vertical-alignment: center; } }
-                    }
+                }
 
-                    // Group: MASTER DATA
-                    HorizontalLayout { padding-left: 8px; padding-top: 8px; padding-bottom: 2px; Text { text: "MASTER DATA"; font-size: 10px; font-weight: 800; color: AppStyle.text-muted; } }
-                    Rectangle {
-                        height: AppStyle.row-height-dense; border-radius: 4px;
-                        background: root.active_view == 4 ? AppStyle.primary-light : transparent;
-                        border-width: root.active_view == 4 ? 1px : 0px; border-color: AppStyle.primary-border;
-                        TouchArea { clicked => { root.active_view = 4; root.navigasi(4); } }
-                        HorizontalLayout { padding-left: 10px; Text { text: "Katalog Barang"; font-size: AppStyle.font-sm; font-weight: root.active_view == 4 ? 700 : 500; color: root.active_view == 4 ? AppStyle.primary-dark : AppStyle.text-secondary; vertical-alignment: center; } }
+                // [F3] Retur Penjualan
+                Rectangle {
+                    border-radius: 4px;
+                    background: root.active_view == 2 ? AppStyle.primary-light : AppStyle.surface;
+                    border-width: 1px;
+                    border-color: root.active_view == 2 ? AppStyle.primary : AppStyle.border;
+                    TouchArea { clicked => { root.active_view = 2; root.navigasi(2); } }
+                    HorizontalLayout {
+                        padding-left: 6px; padding-right: 8px; spacing: 4px; alignment: center;
+                        Rectangle {
+                            width: 22px; height: 18px; border-radius: 2px;
+                            background: root.active_view == 2 ? AppStyle.primary : AppStyle.bg;
+                            border-width: 1px; border-color: root.active_view == 2 ? AppStyle.primary-dark : AppStyle.border;
+                            Text { text: "F3"; font-size: 9px; font-weight: 800; color: root.active_view == 2 ? #ffffff : AppStyle.text-muted; horizontal-alignment: center; vertical-alignment: center; }
+                        }
+                        Text { text: "Retur Jual"; font-size: AppStyle.font-xs; font-weight: root.active_view == 2 ? 800 : 600; color: root.active_view == 2 ? AppStyle.primary-dark : AppStyle.text-primary; vertical-alignment: center; }
                     }
-                    Rectangle {
-                        height: AppStyle.row-height-dense; border-radius: 4px;
-                        background: root.active_view == 5 ? AppStyle.primary-light : transparent;
-                        border-width: root.active_view == 5 ? 1px : 0px; border-color: AppStyle.primary-border;
-                        TouchArea { clicked => { root.active_view = 5; root.navigasi(5); } }
-                        HorizontalLayout { padding-left: 10px; Text { text: "Pelanggan & Member"; font-size: AppStyle.font-sm; font-weight: root.active_view == 5 ? 700 : 500; color: root.active_view == 5 ? AppStyle.primary-dark : AppStyle.text-secondary; vertical-alignment: center; } }
-                    }
-                    Rectangle {
-                        height: AppStyle.row-height-dense; border-radius: 4px;
-                        background: root.active_view == 6 ? AppStyle.primary-light : transparent;
-                        border-width: root.active_view == 6 ? 1px : 0px; border-color: AppStyle.primary-border;
-                        TouchArea { clicked => { root.active_view = 6; root.navigasi(6); } }
-                        HorizontalLayout { padding-left: 10px; Text { text: "Supplier / Vendor"; font-size: AppStyle.font-sm; font-weight: root.active_view == 6 ? 700 : 500; color: root.active_view == 6 ? AppStyle.primary-dark : AppStyle.text-secondary; vertical-alignment: center; } }
-                    }
-                    Rectangle {
-                        height: AppStyle.row-height-dense; border-radius: 4px;
-                        background: root.active_view == 7 ? AppStyle.primary-light : transparent;
-                        border-width: root.active_view == 7 ? 1px : 0px; border-color: AppStyle.primary-border;
-                        TouchArea { clicked => { root.active_view = 7; root.navigasi(7); } }
-                        HorizontalLayout { padding-left: 10px; Text { text: "Stok Opname Fisik"; font-size: AppStyle.font-sm; font-weight: root.active_view == 7 ? 700 : 500; color: root.active_view == 7 ? AppStyle.primary-dark : AppStyle.text-secondary; vertical-alignment: center; } }
-                    }
+                }
 
-                    // Group: KEUANGAN & LAPORAN
-                    HorizontalLayout { padding-left: 8px; padding-top: 8px; padding-bottom: 2px; Text { text: "KEUANGAN & LAPORAN"; font-size: 10px; font-weight: 800; color: AppStyle.text-muted; } }
-                    Rectangle {
-                        height: AppStyle.row-height-dense; border-radius: 4px;
-                        background: root.active_view == 8 ? AppStyle.primary-light : transparent;
-                        border-width: root.active_view == 8 ? 1px : 0px; border-color: AppStyle.primary-border;
-                        TouchArea { clicked => { root.active_view = 8; root.navigasi(8); } }
-                        HorizontalLayout { padding-left: 10px; Text { text: "Laporan Omzet & Laba"; font-size: AppStyle.font-sm; font-weight: root.active_view == 8 ? 700 : 500; color: root.active_view == 8 ? AppStyle.primary-dark : AppStyle.text-secondary; vertical-alignment: center; } }
-                    }
-                    Rectangle {
-                        height: AppStyle.row-height-dense; border-radius: 4px;
-                        background: root.active_view == 9 ? AppStyle.primary-light : transparent;
-                        border-width: root.active_view == 9 ? 1px : 0px; border-color: AppStyle.primary-border;
-                        TouchArea { clicked => { root.active_view = 9; root.navigasi(9); } }
-                        HorizontalLayout { padding-left: 10px; Text { text: "Hutang & Piutang"; font-size: AppStyle.font-sm; font-weight: root.active_view == 9 ? 700 : 500; color: root.active_view == 9 ? AppStyle.primary-dark : AppStyle.text-secondary; vertical-alignment: center; } }
-                    }
-                    Rectangle {
-                        height: AppStyle.row-height-dense; border-radius: 4px;
-                        background: root.active_view == 10 ? AppStyle.primary-light : transparent;
-                        border-width: root.active_view == 10 ? 1px : 0px; border-color: AppStyle.primary-border;
-                        TouchArea { clicked => { root.active_view = 10; root.navigasi(10); } }
-                        HorizontalLayout { padding-left: 10px; Text { text: "Buku Kas & Biaya"; font-size: AppStyle.font-sm; font-weight: root.active_view == 10 ? 700 : 500; color: root.active_view == 10 ? AppStyle.primary-dark : AppStyle.text-secondary; vertical-alignment: center; } }
-                    }
+                Rectangle { width: 1px; height: 24px; background: AppStyle.border; }
 
-                    // Group: SISTEM
-                    HorizontalLayout { padding-left: 8px; padding-top: 8px; padding-bottom: 2px; Text { text: "SISTEM"; font-size: 10px; font-weight: 800; color: AppStyle.text-muted; } }
-                    Rectangle {
-                        height: AppStyle.row-height-dense; border-radius: 4px;
-                        background: root.active_view == 11 ? AppStyle.primary-light : transparent;
-                        border-width: root.active_view == 11 ? 1px : 0px; border-color: AppStyle.primary-border;
-                        TouchArea { clicked => { root.active_view = 11; root.navigasi(11); } }
-                        HorizontalLayout { padding-left: 10px; Text { text: "Shift Kasir"; font-size: AppStyle.font-sm; font-weight: root.active_view == 11 ? 700 : 500; color: root.active_view == 11 ? AppStyle.primary-dark : AppStyle.text-secondary; vertical-alignment: center; } }
+                // [F4] Pembelian
+                Rectangle {
+                    border-radius: 4px;
+                    background: root.active_view == 3 ? AppStyle.primary-light : AppStyle.surface;
+                    border-width: 1px;
+                    border-color: root.active_view == 3 ? AppStyle.primary : AppStyle.border;
+                    TouchArea { clicked => { root.active_view = 3; root.navigasi(3); } }
+                    HorizontalLayout {
+                        padding-left: 6px; padding-right: 8px; spacing: 4px; alignment: center;
+                        Rectangle {
+                            width: 22px; height: 18px; border-radius: 2px;
+                            background: root.active_view == 3 ? AppStyle.primary : AppStyle.bg;
+                            border-width: 1px; border-color: root.active_view == 3 ? AppStyle.primary-dark : AppStyle.border;
+                            Text { text: "F4"; font-size: 9px; font-weight: 800; color: root.active_view == 3 ? #ffffff : AppStyle.text-muted; horizontal-alignment: center; vertical-alignment: center; }
+                        }
+                        Text { text: "Pembelian"; font-size: AppStyle.font-xs; font-weight: root.active_view == 3 ? 800 : 600; color: root.active_view == 3 ? AppStyle.primary-dark : AppStyle.text-primary; vertical-alignment: center; }
                     }
-                    Rectangle {
-                        height: AppStyle.row-height-dense; border-radius: 4px;
-                        background: root.active_view == 12 ? AppStyle.primary-light : transparent;
-                        border-width: root.active_view == 12 ? 1px : 0px; border-color: AppStyle.primary-border;
-                        TouchArea { clicked => { root.active_view = 12; root.navigasi(12); } }
-                        HorizontalLayout { padding-left: 10px; Text { text: "Pengaturan & Lisensi"; font-size: AppStyle.font-sm; font-weight: root.active_view == 12 ? 700 : 500; color: root.active_view == 12 ? AppStyle.primary-dark : AppStyle.text-secondary; vertical-alignment: center; } }
+                }
+
+                // [F5] Master Barang
+                Rectangle {
+                    border-radius: 4px;
+                    background: root.active_view == 4 ? AppStyle.primary-light : AppStyle.surface;
+                    border-width: 1px;
+                    border-color: root.active_view == 4 ? AppStyle.primary : AppStyle.border;
+                    TouchArea { clicked => { root.active_view = 4; root.navigasi(4); } }
+                    HorizontalLayout {
+                        padding-left: 6px; padding-right: 8px; spacing: 4px; alignment: center;
+                        Rectangle {
+                            width: 22px; height: 18px; border-radius: 2px;
+                            background: root.active_view == 4 ? AppStyle.primary : AppStyle.bg;
+                            border-width: 1px; border-color: root.active_view == 4 ? AppStyle.primary-dark : AppStyle.border;
+                            Text { text: "F5"; font-size: 9px; font-weight: 800; color: root.active_view == 4 ? #ffffff : AppStyle.text-muted; horizontal-alignment: center; vertical-alignment: center; }
+                        }
+                        Text { text: "Data Barang"; font-size: AppStyle.font-xs; font-weight: root.active_view == 4 ? 800 : 600; color: root.active_view == 4 ? AppStyle.primary-dark : AppStyle.text-primary; vertical-alignment: center; }
+                    }
+                }
+
+                // [F6] Pelanggan & Member
+                Rectangle {
+                    border-radius: 4px;
+                    background: root.active_view == 5 ? AppStyle.primary-light : AppStyle.surface;
+                    border-width: 1px;
+                    border-color: root.active_view == 5 ? AppStyle.primary : AppStyle.border;
+                    TouchArea { clicked => { root.active_view = 5; root.navigasi(5); } }
+                    HorizontalLayout {
+                        padding-left: 6px; padding-right: 8px; spacing: 4px; alignment: center;
+                        Rectangle {
+                            width: 22px; height: 18px; border-radius: 2px;
+                            background: root.active_view == 5 ? AppStyle.primary : AppStyle.bg;
+                            border-width: 1px; border-color: root.active_view == 5 ? AppStyle.primary-dark : AppStyle.border;
+                            Text { text: "F6"; font-size: 9px; font-weight: 800; color: root.active_view == 5 ? #ffffff : AppStyle.text-muted; horizontal-alignment: center; vertical-alignment: center; }
+                        }
+                        Text { text: "Pelanggan"; font-size: AppStyle.font-xs; font-weight: root.active_view == 5 ? 800 : 600; color: root.active_view == 5 ? AppStyle.primary-dark : AppStyle.text-primary; vertical-alignment: center; }
+                    }
+                }
+
+                // [F7] Supplier
+                Rectangle {
+                    border-radius: 4px;
+                    background: root.active_view == 6 ? AppStyle.primary-light : AppStyle.surface;
+                    border-width: 1px;
+                    border-color: root.active_view == 6 ? AppStyle.primary : AppStyle.border;
+                    TouchArea { clicked => { root.active_view = 6; root.navigasi(6); } }
+                    HorizontalLayout {
+                        padding-left: 6px; padding-right: 8px; spacing: 4px; alignment: center;
+                        Rectangle {
+                            width: 22px; height: 18px; border-radius: 2px;
+                            background: root.active_view == 6 ? AppStyle.primary : AppStyle.bg;
+                            border-width: 1px; border-color: root.active_view == 6 ? AppStyle.primary-dark : AppStyle.border;
+                            Text { text: "F7"; font-size: 9px; font-weight: 800; color: root.active_view == 6 ? #ffffff : AppStyle.text-muted; horizontal-alignment: center; vertical-alignment: center; }
+                        }
+                        Text { text: "Supplier"; font-size: AppStyle.font-xs; font-weight: root.active_view == 6 ? 800 : 600; color: root.active_view == 6 ? AppStyle.primary-dark : AppStyle.text-primary; vertical-alignment: center; }
+                    }
+                }
+
+                Rectangle { width: 1px; height: 24px; background: AppStyle.border; }
+
+                // [F8] Stok Opname
+                Rectangle {
+                    border-radius: 4px;
+                    background: root.active_view == 7 ? AppStyle.primary-light : AppStyle.surface;
+                    border-width: 1px;
+                    border-color: root.active_view == 7 ? AppStyle.primary : AppStyle.border;
+                    TouchArea { clicked => { root.active_view = 7; root.navigasi(7); } }
+                    HorizontalLayout {
+                        padding-left: 6px; padding-right: 8px; spacing: 4px; alignment: center;
+                        Rectangle {
+                            width: 22px; height: 18px; border-radius: 2px;
+                            background: root.active_view == 7 ? AppStyle.primary : AppStyle.bg;
+                            border-width: 1px; border-color: root.active_view == 7 ? AppStyle.primary-dark : AppStyle.border;
+                            Text { text: "F8"; font-size: 9px; font-weight: 800; color: root.active_view == 7 ? #ffffff : AppStyle.text-muted; horizontal-alignment: center; vertical-alignment: center; }
+                        }
+                        Text { text: "Stok Opname"; font-size: AppStyle.font-xs; font-weight: root.active_view == 7 ? 800 : 600; color: root.active_view == 7 ? AppStyle.primary-dark : AppStyle.text-primary; vertical-alignment: center; }
+                    }
+                }
+
+                // [F9] Laporan Keuangan
+                Rectangle {
+                    border-radius: 4px;
+                    background: root.active_view == 8 ? AppStyle.primary-light : AppStyle.surface;
+                    border-width: 1px;
+                    border-color: root.active_view == 8 ? AppStyle.primary : AppStyle.border;
+                    TouchArea { clicked => { root.active_view = 8; root.navigasi(8); } }
+                    HorizontalLayout {
+                        padding-left: 6px; padding-right: 8px; spacing: 4px; alignment: center;
+                        Rectangle {
+                            width: 22px; height: 18px; border-radius: 2px;
+                            background: root.active_view == 8 ? AppStyle.primary : AppStyle.bg;
+                            border-width: 1px; border-color: root.active_view == 8 ? AppStyle.primary-dark : AppStyle.border;
+                            Text { text: "F9"; font-size: 9px; font-weight: 800; color: root.active_view == 8 ? #ffffff : AppStyle.text-muted; horizontal-alignment: center; vertical-alignment: center; }
+                        }
+                        Text { text: "Laporan"; font-size: AppStyle.font-xs; font-weight: root.active_view == 8 ? 800 : 600; color: root.active_view == 8 ? AppStyle.primary-dark : AppStyle.text-primary; vertical-alignment: center; }
+                    }
+                }
+
+                // [F10] Hutang & Piutang
+                Rectangle {
+                    border-radius: 4px;
+                    background: root.active_view == 9 ? AppStyle.primary-light : AppStyle.surface;
+                    border-width: 1px;
+                    border-color: root.active_view == 9 ? AppStyle.primary : AppStyle.border;
+                    TouchArea { clicked => { root.active_view = 9; root.navigasi(9); } }
+                    HorizontalLayout {
+                        padding-left: 6px; padding-right: 8px; spacing: 4px; alignment: center;
+                        Rectangle {
+                            width: 22px; height: 18px; border-radius: 2px;
+                            background: root.active_view == 9 ? AppStyle.primary : AppStyle.bg;
+                            border-width: 1px; border-color: root.active_view == 9 ? AppStyle.primary-dark : AppStyle.border;
+                            Text { text: "F10"; font-size: 9px; font-weight: 800; color: root.active_view == 9 ? #ffffff : AppStyle.text-muted; horizontal-alignment: center; vertical-alignment: center; }
+                        }
+                        Text { text: "Hutang/Piutang"; font-size: AppStyle.font-xs; font-weight: root.active_view == 9 ? 800 : 600; color: root.active_view == 9 ? AppStyle.primary-dark : AppStyle.text-primary; vertical-alignment: center; }
+                    }
+                }
+
+                // [F11] Buku Kas
+                Rectangle {
+                    border-radius: 4px;
+                    background: root.active_view == 10 ? AppStyle.primary-light : AppStyle.surface;
+                    border-width: 1px;
+                    border-color: root.active_view == 10 ? AppStyle.primary : AppStyle.border;
+                    TouchArea { clicked => { root.active_view = 10; root.navigasi(10); } }
+                    HorizontalLayout {
+                        padding-left: 6px; padding-right: 8px; spacing: 4px; alignment: center;
+                        Rectangle {
+                            width: 22px; height: 18px; border-radius: 2px;
+                            background: root.active_view == 10 ? AppStyle.primary : AppStyle.bg;
+                            border-width: 1px; border-color: root.active_view == 10 ? AppStyle.primary-dark : AppStyle.border;
+                            Text { text: "F11"; font-size: 9px; font-weight: 800; color: root.active_view == 10 ? #ffffff : AppStyle.text-muted; horizontal-alignment: center; vertical-alignment: center; }
+                        }
+                        Text { text: "Buku Kas"; font-size: AppStyle.font-xs; font-weight: root.active_view == 10 ? 800 : 600; color: root.active_view == 10 ? AppStyle.primary-dark : AppStyle.text-primary; vertical-alignment: center; }
+                    }
+                }
+
+                // [F12] Shift Kasir
+                Rectangle {
+                    border-radius: 4px;
+                    background: root.active_view == 11 ? AppStyle.primary-light : AppStyle.surface;
+                    border-width: 1px;
+                    border-color: root.active_view == 11 ? AppStyle.primary : AppStyle.border;
+                    TouchArea { clicked => { root.active_view = 11; root.navigasi(11); } }
+                    HorizontalLayout {
+                        padding-left: 6px; padding-right: 8px; spacing: 4px; alignment: center;
+                        Rectangle {
+                            width: 22px; height: 18px; border-radius: 2px;
+                            background: root.active_view == 11 ? AppStyle.primary : AppStyle.bg;
+                            border-width: 1px; border-color: root.active_view == 11 ? AppStyle.primary-dark : AppStyle.border;
+                            Text { text: "F12"; font-size: 9px; font-weight: 800; color: root.active_view == 11 ? #ffffff : AppStyle.text-muted; horizontal-alignment: center; vertical-alignment: center; }
+                        }
+                        Text { text: "Shift"; font-size: AppStyle.font-xs; font-weight: root.active_view == 11 ? 800 : 600; color: root.active_view == 11 ? AppStyle.primary-dark : AppStyle.text-primary; vertical-alignment: center; }
+                    }
+                }
+
+                Rectangle { width: 1px; height: 24px; background: AppStyle.border; }
+
+                // Pengaturan & Lisensi
+                Rectangle {
+                    border-radius: 4px;
+                    background: root.active_view == 12 ? AppStyle.primary-light : AppStyle.surface;
+                    border-width: 1px;
+                    border-color: root.active_view == 12 ? AppStyle.primary : AppStyle.border;
+                    TouchArea { clicked => { root.active_view = 12; root.navigasi(12); } }
+                    HorizontalLayout {
+                        padding-left: 8px; padding-right: 8px; alignment: center;
+                        Text { text: "Pengaturan"; font-size: AppStyle.font-xs; font-weight: root.active_view == 12 ? 800 : 600; color: root.active_view == 12 ? AppStyle.primary-dark : AppStyle.text-secondary; vertical-alignment: center; }
                     }
                 }
             }
+        }
 
-            // WORKSPACE KANAN (Tempat Menampilkan Modul Aktif)
-            VerticalLayout {
-                padding: AppStyle.space-md;
-                spacing: AppStyle.space-sm;
-                vertical-stretch: 1;
+        // =========================================================================
+        // FULL-WIDTH WORKSPACE CANVAS (100% Layar Bersih & Luas, Tanpa Sidebar)
+        // =========================================================================
+        VerticalLayout {
+            padding: AppStyle.space-sm;
+            spacing: AppStyle.space-xs;
+            vertical-stretch: 1;
 
-                if root.active_view == 0: KasirView {
-                    input_barcode <=> root.input_barcode;
-                    items: root.cart_items;
-                    total_belanja: root.total_belanja;
+            if root.active_view == 0: KasirView {
+                input_barcode <=> root.input_barcode;
+                items: root.cart_items;
+                total_belanja: root.total_belanja;
                     bayar_tunai <=> root.bayar_tunai;
                     kembalian: root.kembalian;
 
@@ -471,7 +615,6 @@ export component MainWindow inherits Window {
                     buat_backup_db() => { root.buat_backup_db(); }
                 }
             }
-        }
 
         // =========================================================================
         // STATUS BAR BAWAH (Light Theme, Border-Top, Anti AI-Slop)
