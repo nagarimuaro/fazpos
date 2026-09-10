@@ -107,8 +107,19 @@ export component MainWindow inherits Window {
     in-out property <string> license_status_text: "BELUM AKTIVASI";
     in-out property <string> license_toko: "-";
 
+    // Fullscreen & Interaktivitas Popup Modal
+    in-out property <bool> is_fullscreen: true;
+    in-out property <bool> show_modal_sukses: false;
+    in-out property <string> sukses_faktur: "";
+    in-out property <float> sukses_total: 0.0;
+    in-out property <float> sukses_bayar: 0.0;
+    in-out property <float> sukses_kembalian: 0.0;
+    in-out property <bool> show_modal_help: false;
+
     // Callbacks Navigasi & Bisnis
     callback navigasi(int);
+    callback toggle_fullscreen();
+    callback cetak_struk_terakhir();
     callback cari_barcode(string);
     callback ubah_qty_kasir(int, float);
     callback hapus_item_kasir(int);
@@ -191,9 +202,9 @@ export component MainWindow inherits Window {
                     }
                 }
 
-                // Status Kanan (Toko, Operator, Shift)
+                // Status Kanan (Toko, Operator, Shift, Bantuan, Fullscreen)
                 HorizontalLayout {
-                    spacing: AppStyle.space-lg;
+                    spacing: AppStyle.space-md;
                     alignment: end;
 
                     Text { text: root.toko_nama; font-size: AppStyle.font-sm; font-weight: 700; color: AppStyle.text-primary; vertical-alignment: center; }
@@ -208,6 +219,28 @@ export component MainWindow inherits Window {
                         HorizontalLayout {
                             padding-left: AppStyle.space-sm; padding-right: AppStyle.space-sm;
                             Text { text: root.shift_status; font-size: 10px; font-weight: 700; color: AppStyle.success; vertical-alignment: center; }
+                        }
+                    }
+
+                    // Tombol Bantuan Pintasan
+                    Rectangle {
+                        height: 24px; border-radius: 4px;
+                        background: AppStyle.bg; border-width: 1px; border-color: AppStyle.border;
+                        TouchArea { clicked => { root.show_modal_help = !root.show_modal_help; } }
+                        HorizontalLayout {
+                            padding-left: 8px; padding-right: 8px;
+                            Text { text: "? Bantuan"; font-size: 10px; font-weight: 700; color: AppStyle.text-secondary; vertical-alignment: center; }
+                        }
+                    }
+
+                    // Tombol Toggle Fullscreen
+                    Rectangle {
+                        height: 24px; border-radius: 4px;
+                        background: AppStyle.bg; border-width: 1px; border-color: AppStyle.border;
+                        TouchArea { clicked => { root.toggle_fullscreen(); } }
+                        HorizontalLayout {
+                            padding-left: 8px; padding-right: 8px;
+                            Text { text: root.is_fullscreen ? "Normal Window" : "Full Screen"; font-size: 10px; font-weight: 700; color: AppStyle.primary-dark; vertical-alignment: center; }
                         }
                     }
                 }
@@ -630,6 +663,141 @@ export component MainWindow inherits Window {
                 alignment: space-between;
                 Text { text: root.status_pesan; font-size: AppStyle.font-xs; color: AppStyle.text-secondary; vertical-alignment: center; }
                 Text { text: "FAZPOS Desktop Engine (SQLite WAL) • Siap"; font-size: 10px; color: AppStyle.text-muted; vertical-alignment: center; }
+            }
+        }
+    }
+
+    // =========================================================================
+    // INTERACTIVE MODAL POPUPS (Pop-up Sukses Bayar & Bantuan Pintasan)
+    // =========================================================================
+    if root.show_modal_sukses || root.show_modal_help: Rectangle {
+        background: #00000066;
+
+        TouchArea {
+            // block clicks through to background
+        }
+
+        // 1. POPUP MODAL SUKSES BAYAR (Struk & Kembalian)
+        if root.show_modal_sukses: Rectangle {
+            width: 440px;
+            height: 360px;
+            background: AppStyle.surface;
+            border-radius: 6px;
+            border-width: 1px;
+            border-color: AppStyle.border;
+
+            VerticalLayout {
+                padding: AppStyle.space-lg;
+                spacing: AppStyle.space-md;
+
+                HorizontalLayout {
+                    alignment: space-between;
+                    Text { text: "TRANSAKSI BERHASIL DISIMPAN"; font-size: AppStyle.font-heading; font-weight: 800; color: AppStyle.success; }
+                    Rectangle {
+                        width: 24px; height: 24px; border-radius: 3px; background: AppStyle.bg;
+                        TouchArea { clicked => { root.show_modal_sukses = false; } }
+                        Text { text: "X"; font-size: 11px; font-weight: 700; color: AppStyle.text-muted; horizontal-alignment: center; vertical-alignment: center; }
+                    }
+                }
+
+                Rectangle { height: 1px; background: AppStyle.border; }
+
+                VerticalLayout {
+                    spacing: 8px;
+                    HorizontalLayout {
+                        alignment: space-between;
+                        Text { text: "No. Faktur:"; font-size: AppStyle.font-sm; color: AppStyle.text-secondary; }
+                        Text { text: root.sukses_faktur; font-size: AppStyle.font-body; font-weight: 700; color: AppStyle.primary; }
+                    }
+                    HorizontalLayout {
+                        alignment: space-between;
+                        Text { text: "Total Tagihan:"; font-size: AppStyle.font-sm; color: AppStyle.text-secondary; }
+                        Text { text: "Rp " + root.sukses_total; font-size: AppStyle.font-body; font-weight: 700; color: AppStyle.text-primary; }
+                    }
+                    HorizontalLayout {
+                        alignment: space-between;
+                        Text { text: "Uang Diterima:"; font-size: AppStyle.font-sm; color: AppStyle.text-secondary; }
+                        Text { text: "Rp " + root.sukses_bayar; font-size: AppStyle.font-body; font-weight: 700; color: AppStyle.text-primary; }
+                    }
+                    Rectangle {
+                        height: 70px;
+                        background: AppStyle.success-bg;
+                        border-radius: 6px;
+                        border-width: 1px;
+                        border-color: AppStyle.success-border;
+                        VerticalLayout {
+                            alignment: center; spacing: 4px;
+                            Text { text: "KEMBALIAN UANG KAS:"; font-size: 10px; font-weight: 800; color: AppStyle.success; horizontal-alignment: center; }
+                            Text { text: "Rp " + root.sukses_kembalian; font-size: 26px; font-weight: 900; color: AppStyle.success; horizontal-alignment: center; }
+                        }
+                    }
+                }
+
+                HorizontalLayout {
+                    spacing: AppStyle.space-sm;
+                    Rectangle {
+                        horizontal-stretch: 1; height: AppStyle.button-height-primary;
+                        background: AppStyle.primary; border-radius: 4px;
+                        TouchArea { clicked => {
+                            root.cetak_struk_terakhir();
+                            root.show_modal_sukses = false;
+                        } }
+                        Text { text: "CETAK STRUK (ENTER)"; font-size: AppStyle.font-xs; font-weight: 700; color: #ffffff; horizontal-alignment: center; vertical-alignment: center; }
+                    }
+                    Rectangle {
+                        horizontal-stretch: 1; height: AppStyle.button-height-primary;
+                        background: AppStyle.success; border-radius: 4px;
+                        TouchArea { clicked => { root.show_modal_sukses = false; } }
+                        Text { text: "TRANSAKSI BARU (ESC)"; font-size: AppStyle.font-xs; font-weight: 700; color: #ffffff; horizontal-alignment: center; vertical-alignment: center; }
+                    }
+                }
+            }
+        }
+
+        // 2. POPUP MODAL BANTUAN TOMBOL PINTAS (F1 - F12)
+        if root.show_modal_help: Rectangle {
+            width: 500px;
+            height: 420px;
+            background: AppStyle.surface;
+            border-radius: 6px;
+            border-width: 1px;
+            border-color: AppStyle.border;
+
+            VerticalLayout {
+                padding: AppStyle.space-lg;
+                spacing: AppStyle.space-md;
+
+                HorizontalLayout {
+                    alignment: space-between;
+                    Text { text: "PANDUAN TOMBOL PINTAS (KEYBOARD)"; font-size: AppStyle.font-heading; font-weight: 800; color: AppStyle.primary-dark; }
+                    Rectangle {
+                        width: 24px; height: 24px; border-radius: 3px; background: AppStyle.bg;
+                        TouchArea { clicked => { root.show_modal_help = false; } }
+                        Text { text: "X"; font-size: 11px; font-weight: 700; color: AppStyle.text-muted; horizontal-alignment: center; vertical-alignment: center; }
+                    }
+                }
+
+                Rectangle { height: 1px; background: AppStyle.border; }
+
+                VerticalLayout {
+                    spacing: 6px;
+                    HorizontalLayout { alignment: space-between; Text { text: "F1 - Kasir POS"; font-size: AppStyle.font-sm; font-weight: 700; color: AppStyle.text-primary; } Text { text: "Buka layar kasir transaksi"; font-size: AppStyle.font-xs; color: AppStyle.text-muted; } }
+                    HorizontalLayout { alignment: space-between; Text { text: "F2 - Riwayat Penjualan"; font-size: AppStyle.font-sm; font-weight: 700; color: AppStyle.text-primary; } Text { text: "Histori transaksi & cetak ulang"; font-size: AppStyle.font-xs; color: AppStyle.text-muted; } }
+                    HorizontalLayout { alignment: space-between; Text { text: "F3 - Retur Penjualan"; font-size: AppStyle.font-sm; font-weight: 700; color: AppStyle.text-primary; } Text { text: "Retur barang dari pembeli"; font-size: AppStyle.font-xs; color: AppStyle.text-muted; } }
+                    HorizontalLayout { alignment: space-between; Text { text: "F4 - Pembelian Supplier"; font-size: AppStyle.font-sm; font-weight: 700; color: AppStyle.text-primary; } Text { text: "Entri barang masuk & hutang"; font-size: AppStyle.font-xs; color: AppStyle.text-muted; } }
+                    HorizontalLayout { alignment: space-between; Text { text: "F5 - Simpan / Bayar"; font-size: AppStyle.font-sm; font-weight: 700; color: AppStyle.text-primary; } Text { text: "Eksekusi checkout kasir"; font-size: AppStyle.font-xs; color: AppStyle.text-muted; } }
+                    HorizontalLayout { alignment: space-between; Text { text: "F7 - Hold Antrean"; font-size: AppStyle.font-sm; font-weight: 700; color: AppStyle.text-primary; } Text { text: "Tahan keranjang pembeli"; font-size: AppStyle.font-xs; color: AppStyle.text-muted; } }
+                    HorizontalLayout { alignment: space-between; Text { text: "F8 - Stok Opname"; font-size: AppStyle.font-sm; font-weight: 700; color: AppStyle.text-primary; } Text { text: "Cek fisik vs sistem gudang"; font-size: AppStyle.font-xs; color: AppStyle.text-muted; } }
+                    HorizontalLayout { alignment: space-between; Text { text: "F9 - Laporan Bisnis"; font-size: AppStyle.font-sm; font-weight: 700; color: AppStyle.text-primary; } Text { text: "Omzet, laba kotor & produk laris"; font-size: AppStyle.font-xs; color: AppStyle.text-muted; } }
+                    HorizontalLayout { alignment: space-between; Text { text: "F11 - Buku Kas & Biaya"; font-size: AppStyle.font-sm; font-weight: 700; color: AppStyle.text-primary; } Text { text: "Arus kas operasional"; font-size: AppStyle.font-xs; color: AppStyle.text-muted; } }
+                    HorizontalLayout { alignment: space-between; Text { text: "F12 - Shift Kasir"; font-size: AppStyle.font-sm; font-weight: 700; color: AppStyle.text-primary; } Text { text: "Buka / Tutup laci kasir"; font-size: AppStyle.font-xs; color: AppStyle.text-muted; } }
+                }
+
+                Rectangle {
+                    height: 36px; background: AppStyle.primary; border-radius: 4px;
+                    TouchArea { clicked => { root.show_modal_help = false; } }
+                    Text { text: "TUTUP PANDUAN (ESC)"; font-size: AppStyle.font-xs; font-weight: 700; color: #ffffff; horizontal-alignment: center; vertical-alignment: center; }
+                }
             }
         }
     }

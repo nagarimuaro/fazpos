@@ -48,8 +48,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // 4. Inisialisasi Kasir Service
     let kasir_svc = Rc::new(RefCell::new(KasirService::new(cabang_id.clone(), device_id.clone())));
 
-    // 5. Inisialisasi UI Slint
+    // 5. Inisialisasi UI Slint (Fullscreen Mode Default)
     let main_window = MainWindow::new()?;
+    main_window.window().set_fullscreen(true);
+    main_window.set_is_fullscreen(true);
     main_window.set_toko_nama("Nama Ritel Grosir".into());
     main_window.set_operator_nama("Operator : Master".into());
     main_window.set_shift_status(format!("SHIFT: {}", &shift_aktif.id[..8]).into());
@@ -164,12 +166,44 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     win.set_kembalian(kembalian as f32);
                     win.set_status_pesan(format!("Transaksi [{}] ({}) BERHASIL disimpan!", penjualan.faktur, metode).into());
                     muat_data_shift(&win, &database, &cid_checkout, &did_checkout);
+
+                    // Tampilkan Popup Modal Interaktif Sukses Transaksi (Kembalian & Cetak Struk)
+                    win.set_sukses_faktur(penjualan.faktur.clone().into());
+                    win.set_sukses_total(penjualan.total_akhir as f32);
+                    win.set_sukses_bayar(penjualan.bayar_tunai as f32);
+                    win.set_sukses_kembalian(kembalian as f32);
+                    win.set_show_modal_sukses(true);
                 }
             }
             Err(err) => {
                 if let Some(win) = win_handle_checkout.upgrade() {
                     win.set_status_pesan(format!("Gagal checkout: {}", err).into());
                 }
+            }
+        }
+    });
+
+    // ==========================================
+    // CALLBACK: TOGGLE FULLSCREEN & CETAK STRUK POPUP
+    // ==========================================
+    let win_handle_fs = window_handle.clone();
+    main_window.on_toggle_fullscreen(move || {
+        if let Some(win) = win_handle_fs.upgrade() {
+            let is_fs = win.window().is_fullscreen();
+            win.window().set_fullscreen(!is_fs);
+            win.set_is_fullscreen(!is_fs);
+        }
+    });
+
+    let db_struk_last = Rc::clone(&db_ref);
+    let win_handle_struk_last = window_handle.clone();
+    let cid_struk_last = cabang_id.clone();
+    main_window.on_cetak_struk_terakhir(move || {
+        if let Some(win) = win_handle_struk_last.upgrade() {
+            let faktur = win.get_sukses_faktur().to_string();
+            if !faktur.is_empty() {
+                cetak_struk_ke_escpos(&db_struk_last.borrow(), &cid_struk_last, &faktur);
+                win.set_status_pesan(format!("Struk [{}] dicetak ke thermal.", faktur).into());
             }
         }
     });
@@ -549,80 +583,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cid_cetak = cabang_id.clone();
     main_window.on_cetak_struk_riwayat(move |faktur| {
         let database = db_cetak.borrow();
-        let cabang_repo = CabangRepo::new(database.conn());
-        let cabang = cabang_repo.ambil_cabang_pertama().ok().flatten()
-            .unwrap_or_else(|| Cabang::baru(&cid_cetak, "Toko Pusat", true));
-
-        let mut stmt = match database.conn().prepare(
-            "SELECT id, cabang_id, device_id, shift_id, faktur, tanggal, kode_pelanggan, operator_id, subtotal, diskon_rp, total_akhir, bayar_tunai, bayar_nontunai, kembalian, metode_bayar, status, poin_didapat, poin_ditukar, nilai_tukar_poin, sync_status FROM tpenjualan WHERE cabang_id = ?1 AND faktur = ?2 LIMIT 1;"
-        ) {
-            Ok(s) => s,
-            Err(_) => return,
-        };
-
-        let opt_penjualan = stmt.query_row(rusqlite::params![cid_cetak, faktur.as_str()], |row| {
-            let tgl_str: String = row.get(5)?;
-            let tgl = chrono::DateTime::parse_from_rfc3339(&tgl_str)
-                .map(|d| d.with_timezone(&chrono::Utc))
-                .unwrap_or_else(|_| chrono::Utc::now());
-            Ok(TPenjualan {
-                id: row.get(0)?,
-                cabang_id: row.get(1)?,
-                device_id: row.get(2)?,
-                shift_id: row.get(3)?,
-                faktur: row.get(4)?,
-                tanggal: tgl,
-                kode_pelanggan: row.get(6)?,
-                operator_id: row.get(7)?,
-                subtotal: row.get(8)?,
-                diskon_rp: row.get(9)?,
-                total_akhir: row.get(10)?,
-                bayar_tunai: row.get(11)?,
-                bayar_nontunai: row.get(12)?,
-                kembalian: row.get(13)?,
-                metode_bayar: row.get(14)?,
-                status: row.get(15)?,
-                poin_didapat: row.get(16)?,
-                poin_ditukar: row.get(17)?,
-                nilai_tukar_poin: row.get(18)?,
-                sync_status: row.get(19)?,
-                created_at: None,
-                updated_at: None,
-            })
-        }).optional().ok().flatten();
-
-        if let Some(penjualan) = opt_penjualan {
-            let mut det_stmt = match database.conn().prepare(
-                "SELECT id, penjualan_id, cabang_id, barang_id, kode_barang, nama_barang, jumlah, satuan, hargajual, hargapokok, diskon_persen, diskon_rp, subtotal, sync_status FROM tpenjualandetail WHERE penjualan_id = ?1;"
-            ) {
-                Ok(s) => s,
-                Err(_) => return,
-            };
-            let det_rows = det_stmt.query_map(rusqlite::params![penjualan.id], |r| {
-                Ok(TPenjualanDetail {
-                    id: r.get(0)?,
-                    penjualan_id: r.get(1)?,
-                    cabang_id: r.get(2)?,
-                    barang_id: r.get(3)?,
-                    kode_barang: r.get(4)?,
-                    nama_barang: r.get(5)?,
-                    jumlah: r.get(6)?,
-                    satuan: r.get(7)?,
-                    hargajual: r.get(8)?,
-                    hargapokok: r.get(9)?,
-                    diskon_persen: r.get(10)?,
-                    diskon_rp: r.get(11)?,
-                    subtotal: r.get(12)?,
-                    sync_status: r.get(13)?,
-                    created_at: None,
-                    updated_at: None,
-                })
-            });
-            let details: Vec<TPenjualanDetail> = det_rows.map(|m| m.filter_map(|x| x.ok()).collect()).unwrap_or_default();
-            let struk_bytes = StrukKasir::buat_struk(&cabang, &penjualan, &details, true);
-            let _ = std::fs::write("struk_terakhir.bin", struk_bytes);
+        if cetak_struk_ke_escpos(&database, &cid_cetak, faktur.as_str()) {
             if let Some(win) = win_handle_cetak.upgrade() {
-                win.set_status_pesan(format!("Struk [{}] ESC/POS berhasil digenerate ke struk_terakhir.bin.", faktur).into());
+                win.set_status_pesan(format!("Struk [{}] berhasil dicetak ulang.", faktur).into());
             }
         }
     });
@@ -1027,6 +990,95 @@ fn sinkronkan_tabel_kasir(win: &MainWindow, svc: &KasirService) {
         win.set_member_kode("UMUM".into());
         win.set_member_poin_saldo(0);
         win.set_is_member_attached(false);
+    }
+}
+
+/// Helper cetak struk ke printer thermal ESC/POS (file struk_terakhir.bin)
+fn cetak_struk_ke_escpos(database: &Database, cabang_id: &str, faktur: &str) -> bool {
+    let cabang_repo = CabangRepo::new(database.conn());
+    let cabang = cabang_repo
+        .ambil_cabang_pertama()
+        .ok()
+        .flatten()
+        .unwrap_or_else(|| Cabang::baru(cabang_id, "Toko Pusat", true));
+
+    let mut stmt = match database.conn().prepare(
+        "SELECT id, cabang_id, device_id, shift_id, faktur, tanggal, kode_pelanggan, operator_id, subtotal, diskon_rp, total_akhir, bayar_tunai, bayar_nontunai, kembalian, metode_bayar, status, poin_didapat, poin_ditukar, nilai_tukar_poin, sync_status FROM tpenjualan WHERE cabang_id = ?1 AND faktur = ?2 LIMIT 1;"
+    ) {
+        Ok(s) => s,
+        Err(_) => return false,
+    };
+
+    let opt_penjualan = stmt
+        .query_row(rusqlite::params![cabang_id, faktur], |row| {
+            let tgl_str: String = row.get(5)?;
+            let tgl = chrono::DateTime::parse_from_rfc3339(&tgl_str)
+                .map(|d| d.with_timezone(&chrono::Utc))
+                .unwrap_or_else(|_| chrono::Utc::now());
+            Ok(TPenjualan {
+                id: row.get(0)?,
+                cabang_id: row.get(1)?,
+                device_id: row.get(2)?,
+                shift_id: row.get(3)?,
+                faktur: row.get(4)?,
+                tanggal: tgl,
+                kode_pelanggan: row.get(6)?,
+                operator_id: row.get(7)?,
+                subtotal: row.get(8)?,
+                diskon_rp: row.get(9)?,
+                total_akhir: row.get(10)?,
+                bayar_tunai: row.get(11)?,
+                bayar_nontunai: row.get(12)?,
+                kembalian: row.get(13)?,
+                metode_bayar: row.get(14)?,
+                status: row.get(15)?,
+                poin_didapat: row.get(16)?,
+                poin_ditukar: row.get(17)?,
+                nilai_tukar_poin: row.get(18)?,
+                sync_status: row.get(19)?,
+                created_at: None,
+                updated_at: None,
+            })
+        })
+        .optional()
+        .ok()
+        .flatten();
+
+    if let Some(penjualan) = opt_penjualan {
+        let mut det_stmt = match database.conn().prepare(
+            "SELECT id, penjualan_id, cabang_id, barang_id, kode_barang, nama_barang, jumlah, satuan, hargajual, hargapokok, diskon_persen, diskon_rp, subtotal, sync_status FROM tpenjualandetail WHERE penjualan_id = ?1;"
+        ) {
+            Ok(s) => s,
+            Err(_) => return false,
+        };
+        let det_rows = det_stmt.query_map(rusqlite::params![penjualan.id], |r| {
+            Ok(TPenjualanDetail {
+                id: r.get(0)?,
+                penjualan_id: r.get(1)?,
+                cabang_id: r.get(2)?,
+                barang_id: r.get(3)?,
+                kode_barang: r.get(4)?,
+                nama_barang: r.get(5)?,
+                jumlah: r.get(6)?,
+                satuan: r.get(7)?,
+                hargajual: r.get(8)?,
+                hargapokok: r.get(9)?,
+                diskon_persen: r.get(10)?,
+                diskon_rp: r.get(11)?,
+                subtotal: r.get(12)?,
+                sync_status: r.get(13)?,
+                created_at: None,
+                updated_at: None,
+            })
+        });
+        let details: Vec<TPenjualanDetail> = det_rows
+            .map(|m| m.filter_map(|x| x.ok()).collect())
+            .unwrap_or_default();
+        let struk_bytes = StrukKasir::buat_struk(&cabang, &penjualan, &details, true);
+        let _ = std::fs::write("struk_terakhir.bin", struk_bytes);
+        true
+    } else {
+        false
     }
 }
 
