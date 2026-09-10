@@ -8,5 +8,7 @@ vendor_public.key
 *.db-shm
 struk_terakhir.bin
 backups/
+node_modules/
+dist/
 
 
