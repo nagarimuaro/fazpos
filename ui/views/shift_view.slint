@@ -1,4 +1,6 @@
-﻿export component ShiftView inherits Rectangle {
+﻿import { AppStyle } from "../styles.slint";
+
+export component ShiftView inherits Rectangle {
     background: transparent;
 
     in-out property <float> modal_awal: 100000.0;
@@ -14,33 +16,33 @@
     callback buka_shift(float);
 
     HorizontalLayout {
-        spacing: 12px;
+        spacing: AppStyle.space-md;
 
-        // Rekapitulasi Kas Shift (Kiri)
+        // Rekapitulasi Kas Shift (Kiri - Anti AI-Slop)
         Rectangle {
             horizontal-stretch: 1;
-            background: #ffffff;
+            background: AppStyle.surface;
             border-radius: 4px;
             border-width: 1px;
-            border-color: #cbd5e1;
+            border-color: AppStyle.border;
 
             VerticalLayout {
-                padding: 18px;
-                spacing: 12px;
+                padding: AppStyle.space-lg;
+                spacing: AppStyle.space-md;
 
-                Text { text: "REKAPITULASI KAS SHIFT KASIR"; font-size: 13px; font-weight: 800; color: #0369a1; }
+                Text { text: "REKAPITULASI KAS SHIFT KASIR (§12.4)"; font-size: AppStyle.font-body; font-weight: 800; color: AppStyle.primary-dark; }
 
-                HorizontalLayout { alignment: space-between; Text { text: "Modal Awal Kasir:"; color: #475569; font-size: 12px; } Text { text: "Rp " + root.modal_awal; font-weight: 700; color: #0f172a; font-size: 13px; } }
-                HorizontalLayout { alignment: space-between; Text { text: "Total Penjualan Tunai (+):"; color: #475569; font-size: 12px; } Text { text: "Rp " + root.total_tunai; font-weight: 700; color: #15803d; font-size: 13px; } }
-                HorizontalLayout { alignment: space-between; Text { text: "Total Penjualan Non-Tunai:"; color: #475569; font-size: 12px; } Text { text: "Rp " + root.total_nontunai; font-weight: 700; color: #0284c7; font-size: 13px; } }
-                HorizontalLayout { alignment: space-between; Text { text: "Total Retur (-):"; color: #475569; font-size: 12px; } Text { text: "Rp " + root.total_retur; font-weight: 700; color: #dc2626; font-size: 13px; } }
+                HorizontalLayout { alignment: space-between; Text { text: "Modal Awal Kasir:"; color: AppStyle.text-secondary; font-size: AppStyle.font-sm; } Text { text: "Rp " + root.modal_awal; font-weight: 700; color: AppStyle.text-primary; font-size: AppStyle.font-body; } }
+                HorizontalLayout { alignment: space-between; Text { text: "Total Penjualan Tunai (+):"; color: AppStyle.text-secondary; font-size: AppStyle.font-sm; } Text { text: "Rp " + root.total_tunai; font-weight: 700; color: AppStyle.success; font-size: AppStyle.font-body; } }
+                HorizontalLayout { alignment: space-between; Text { text: "Total Penjualan Non-Tunai:"; color: AppStyle.text-secondary; font-size: AppStyle.font-sm; } Text { text: "Rp " + root.total_nontunai; font-weight: 700; color: AppStyle.primary; font-size: AppStyle.font-body; } }
+                HorizontalLayout { alignment: space-between; Text { text: "Total Retur (-):"; color: AppStyle.text-secondary; font-size: AppStyle.font-sm; } Text { text: "Rp " + root.total_retur; font-weight: 700; color: AppStyle.danger; font-size: AppStyle.font-body; } }
 
-                Rectangle { height: 1px; background: #e2e8f0; }
+                Rectangle { height: 1px; background: AppStyle.border; }
 
                 HorizontalLayout {
                     alignment: space-between;
-                    Text { text: "Uang Kas Seharusnya:"; font-size: 13px; font-weight: 800; color: #0f172a; }
-                    Text { text: "Rp " + root.uang_seharusnya; font-size: 20px; font-weight: 800; color: #0284c7; }
+                    Text { text: "Uang Kas Seharusnya:"; font-size: AppStyle.font-body; font-weight: 800; color: AppStyle.text-primary; }
+                    Text { text: "Rp " + root.uang_seharusnya; font-size: 22px; font-weight: 800; color: AppStyle.primary; }
                 }
             }
         }
@@ -48,46 +50,46 @@
         // Panel Aksi Tutup / Buka Shift (Kanan)
         Rectangle {
             horizontal-stretch: 1;
-            background: #ffffff;
+            background: AppStyle.surface;
             border-radius: 4px;
             border-width: 1px;
-            border-color: #cbd5e1;
+            border-color: AppStyle.border;
 
             VerticalLayout {
-                padding: 18px;
-                spacing: 14px;
+                padding: AppStyle.space-lg;
+                spacing: AppStyle.space-md;
 
                 if root.shift_status != "CLOSED": VerticalLayout {
-                    spacing: 12px;
-                    Text { text: "TUTUP SHIFT KASIR AKTIF"; font-size: 13px; font-weight: 800; color: #b45309; }
+                    spacing: AppStyle.space-md;
+                    Text { text: "TUTUP SHIFT KASIR AKTIF"; font-size: AppStyle.font-body; font-weight: 800; color: AppStyle.warning; }
 
                     VerticalLayout {
                         spacing: 4px;
-                        Text { text: "Catatan Kasir / Keterangan:"; font-size: 11px; font-weight: 600; color: #475569; }
-                        Rectangle { height: 38px; background: #f8fafc; border-radius: 4px; border-width: 1px; border-color: #cbd5e1; HorizontalLayout { padding-left: 8px; TextInput { text <=> root.catatan; font-size: 12px; color: #0f172a; vertical-alignment: center; } } }
+                        Text { text: "Catatan Kasir / Keterangan:"; font-size: AppStyle.font-xs; font-weight: 600; color: AppStyle.text-secondary; }
+                        Rectangle { height: 38px; background: AppStyle.bg; border-radius: 4px; border-width: 1px; border-color: AppStyle.border-focus; HorizontalLayout { padding-left: 8px; TextInput { text <=> root.catatan; font-size: AppStyle.font-sm; color: AppStyle.text-primary; vertical-alignment: center; } } }
                     }
 
                     Rectangle {
-                        height: 42px; background: #dc2626; border-radius: 4px;
+                        height: AppStyle.button-height-primary; background: AppStyle.danger; border-radius: 4px;
                         TouchArea { clicked => { root.tutup_shift(); } }
-                        Text { text: "TUTUP SHIFT KASIR SEKARANG"; font-size: 12px; font-weight: 700; color: #ffffff; horizontal-alignment: center; vertical-alignment: center; }
+                        Text { text: "TUTUP SHIFT KASIR SEKARANG"; font-size: AppStyle.font-sm; font-weight: 700; color: #ffffff; horizontal-alignment: center; vertical-alignment: center; }
                     }
                 }
 
                 if root.shift_status == "CLOSED": VerticalLayout {
-                    spacing: 12px;
-                    Text { text: "BUKA SHIFT KASIR BARU"; font-size: 13px; font-weight: 800; color: #16a34a; }
+                    spacing: AppStyle.space-md;
+                    Text { text: "BUKA SHIFT KASIR BARU"; font-size: AppStyle.font-body; font-weight: 800; color: AppStyle.success; }
 
                     VerticalLayout {
                         spacing: 4px;
-                        Text { text: "Modal Awal Kasir (Rp):"; font-size: 11px; font-weight: 600; color: #475569; }
-                        Rectangle { height: 38px; background: #f8fafc; border-radius: 4px; border-width: 1px; border-color: #cbd5e1; HorizontalLayout { padding-left: 8px; TextInput { text <=> root.input_modal_buka; font-size: 14px; font-weight: 700; color: #0f172a; vertical-alignment: center; } } }
+                        Text { text: "Modal Awal Kasir (Rp):"; font-size: AppStyle.font-xs; font-weight: 600; color: AppStyle.text-secondary; }
+                        Rectangle { height: 38px; background: AppStyle.bg; border-radius: 4px; border-width: 1px; border-color: AppStyle.border-focus; HorizontalLayout { padding-left: 8px; TextInput { text <=> root.input_modal_buka; font-size: AppStyle.font-body; font-weight: 700; color: AppStyle.text-primary; vertical-alignment: center; } } }
                     }
 
                     Rectangle {
-                        height: 42px; background: #16a34a; border-radius: 4px;
+                        height: AppStyle.button-height-primary; background: AppStyle.success; border-radius: 4px;
                         TouchArea { clicked => { root.buka_shift(root.input_modal_buka.to-float()); } }
-                        Text { text: "BUKA SHIFT BARU"; font-size: 12px; font-weight: 700; color: #ffffff; horizontal-alignment: center; vertical-alignment: center; }
+                        Text { text: "BUKA SHIFT BARU"; font-size: AppStyle.font-sm; font-weight: 700; color: #ffffff; horizontal-alignment: center; vertical-alignment: center; }
                     }
                 }
             }

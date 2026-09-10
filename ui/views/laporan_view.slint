@@ -1,4 +1,5 @@
 ﻿import { TopProductData, LaporanMetricData } from "../models.slint";
+import { AppStyle } from "../styles.slint";
 
 export component LaporanView inherits Rectangle {
     background: transparent;
@@ -9,50 +10,50 @@ export component LaporanView inherits Rectangle {
     callback refresh_laporan();
 
     VerticalLayout {
-        spacing: 8px;
+        spacing: AppStyle.space-sm;
 
-        // Header Laporan
+        // Header Laporan (Format Tabel Murni Anti AI-Slop)
         Rectangle {
-            height: 44px; background: #ffffff; border-radius: 4px; border-width: 1px; border-color: #e2e8f0;
+            height: AppStyle.header-height; background: AppStyle.surface; border-radius: 4px; border-width: 1px; border-color: AppStyle.border;
             HorizontalLayout {
-                padding-left: 14px; padding-right: 14px; alignment: space-between;
-                Text { text: "Laporan Keuangan & Penjualan (Format Tabel Murni)"; font-size: 14px; font-weight: 700; color: #0f172a; vertical-alignment: center; }
+                padding-left: AppStyle.space-md; padding-right: AppStyle.space-md; alignment: space-between;
+                Text { text: "Laporan Keuangan & Penjualan (Format Tabel Murni)"; font-size: AppStyle.font-body; font-weight: 700; color: AppStyle.text-primary; vertical-alignment: center; }
                 Rectangle {
-                    height: 28px; background: #e2e8f0; border-radius: 3px;
+                    height: 28px; background: AppStyle.border; border-radius: 3px;
                     TouchArea { clicked => { root.refresh_laporan(); } }
-                    HorizontalLayout { padding-left: 10px; padding-right: 10px; Text { text: "Segarkan Laporan"; font-size: 11px; font-weight: 600; color: #334155; vertical-alignment: center; } }
+                    HorizontalLayout { padding-left: 10px; padding-right: 10px; Text { text: "Segarkan Laporan"; font-size: AppStyle.font-xs; font-weight: 600; color: AppStyle.text-secondary; vertical-alignment: center; } }
                 }
             }
         }
 
         // TABEL 1: RINGKASAN PARAMETER KEUANGAN & OMZET
         Rectangle {
-            background: #ffffff; border-radius: 4px; border-width: 1px; border-color: #e2e8f0;
+            background: AppStyle.surface; border-radius: 4px; border-width: 1px; border-color: AppStyle.border;
             height: 210px;
 
             VerticalLayout {
-                padding: 8px; spacing: 2px;
-                Text { text: "1. RINGKASAN KEUANGAN & OMZET PENJUALAN"; font-size: 11px; font-weight: 800; color: #0369a1; }
+                padding: AppStyle.space-sm; spacing: 2px;
+                Text { text: "1. RINGKASAN KEUANGAN & OMZET PENJUALAN"; font-size: AppStyle.font-xs; font-weight: 800; color: AppStyle.primary-dark; }
 
                 Rectangle {
-                    height: 28px; background: #f8fafc; border-width: 1px; border-color: #e2e8f0;
+                    height: 28px; background: AppStyle.bg; border-width: 1px; border-color: AppStyle.border;
                     HorizontalLayout {
                         padding-left: 10px; padding-right: 10px;
-                        Text { width: 40px; text: "No."; font-size: 11px; font-weight: 700; color: #475569; vertical-alignment: center; }
-                        Text { width: 220px; text: "Parameter / Indikator"; font-size: 11px; font-weight: 700; color: #475569; vertical-alignment: center; }
-                        Text { width: 180px; text: "Nilai Nominal (Rp)"; font-size: 11px; font-weight: 700; color: #475569; horizontal-alignment: right; vertical-alignment: center; }
-                        Text { horizontal-stretch: 1; text: "Keterangan"; font-size: 11px; font-weight: 700; color: #475569; vertical-alignment: center; }
+                        Text { width: 40px; text: "No."; font-size: AppStyle.font-xs; font-weight: 700; color: AppStyle.text-secondary; vertical-alignment: center; }
+                        Text { width: 220px; text: "Parameter / Indikator"; font-size: AppStyle.font-xs; font-weight: 700; color: AppStyle.text-secondary; vertical-alignment: center; }
+                        Text { width: 180px; text: "Nilai Nominal (Rp)"; font-size: AppStyle.font-xs; font-weight: 700; color: AppStyle.text-secondary; horizontal-alignment: right; vertical-alignment: center; }
+                        Text { horizontal-stretch: 1; text: "Keterangan"; font-size: AppStyle.font-xs; font-weight: 700; color: AppStyle.text-secondary; vertical-alignment: center; }
                     }
                 }
 
                 for m[idx] in root.metrics: Rectangle {
-                    height: 30px; background: Math.mod(idx, 2) == 0 ? #ffffff : #f8fafc; border-width: 1px; border-color: #f1f5f9;
+                    height: AppStyle.row-height-dense; background: Math.mod(idx, 2) == 0 ? AppStyle.surface : AppStyle.row-alt; border-width: 1px; border-color: AppStyle.border;
                     HorizontalLayout {
                         padding-left: 10px; padding-right: 10px;
-                        Text { width: 40px; text: "" + (idx + 1); font-size: 11px; color: #64748b; vertical-alignment: center; }
-                        Text { width: 220px; text: m.metrik; font-size: 12px; font-weight: 600; color: #0f172a; vertical-alignment: center; }
-                        Text { width: 180px; text: m.nilai; font-size: 12px; font-weight: 700; color: #15803d; horizontal-alignment: right; vertical-alignment: center; }
-                        Text { horizontal-stretch: 1; text: m.keterangan; font-size: 11px; color: #64748b; vertical-alignment: center; }
+                        Text { width: 40px; text: "" + (idx + 1); font-size: AppStyle.font-xs; color: AppStyle.text-muted; vertical-alignment: center; }
+                        Text { width: 220px; text: m.metrik; font-size: AppStyle.font-sm; font-weight: 600; color: AppStyle.text-primary; vertical-alignment: center; }
+                        Text { width: 180px; text: m.nilai; font-size: AppStyle.font-sm; font-weight: 700; color: AppStyle.success; horizontal-alignment: right; vertical-alignment: center; }
+                        Text { horizontal-stretch: 1; text: m.keterangan; font-size: AppStyle.font-xs; color: AppStyle.text-muted; vertical-alignment: center; }
                     }
                 }
             }
@@ -60,40 +61,40 @@ export component LaporanView inherits Rectangle {
 
         // TABEL 2: PERINGKAT PRODUK TERLARIS (TOP SELLING)
         Rectangle {
-            background: #ffffff; border-radius: 4px; border-width: 1px; border-color: #e2e8f0;
+            background: AppStyle.surface; border-radius: 4px; border-width: 1px; border-color: AppStyle.border;
             vertical-stretch: 1;
 
             VerticalLayout {
-                padding: 8px; spacing: 2px;
-                Text { text: "2. PERINGKAT PRODUK TERLARIS (TOP 10 PENJUALAN)"; font-size: 11px; font-weight: 800; color: #0369a1; }
+                padding: AppStyle.space-sm; spacing: 2px;
+                Text { text: "2. PERINGKAT PRODUK TERLARIS (TOP 10 PENJUALAN)"; font-size: AppStyle.font-xs; font-weight: 800; color: AppStyle.primary-dark; }
 
                 Rectangle {
-                    height: 28px; background: #f8fafc; border-width: 1px; border-color: #e2e8f0;
+                    height: 28px; background: AppStyle.bg; border-width: 1px; border-color: AppStyle.border;
                     HorizontalLayout {
                         padding-left: 10px; padding-right: 10px;
-                        Text { width: 60px; text: "Rank"; font-size: 11px; font-weight: 700; color: #475569; vertical-alignment: center; }
-                        Text { width: 100px; text: "Kode"; font-size: 11px; font-weight: 700; color: #475569; vertical-alignment: center; }
-                        Text { horizontal-stretch: 1; text: "Nama Produk"; font-size: 11px; font-weight: 700; color: #475569; vertical-alignment: center; }
-                        Text { width: 110px; text: "Qty Terjual"; font-size: 11px; font-weight: 700; color: #475569; horizontal-alignment: center; vertical-alignment: center; }
-                        Text { width: 140px; text: "Total Omzet (Rp)"; font-size: 11px; font-weight: 700; color: #475569; horizontal-alignment: right; vertical-alignment: center; }
+                        Text { width: 60px; text: "Rank"; font-size: AppStyle.font-xs; font-weight: 700; color: AppStyle.text-secondary; vertical-alignment: center; }
+                        Text { width: 100px; text: "Kode"; font-size: AppStyle.font-xs; font-weight: 700; color: AppStyle.text-secondary; vertical-alignment: center; }
+                        Text { horizontal-stretch: 1; text: "Nama Produk"; font-size: AppStyle.font-xs; font-weight: 700; color: AppStyle.text-secondary; vertical-alignment: center; }
+                        Text { width: 110px; text: "Qty Terjual"; font-size: AppStyle.font-xs; font-weight: 700; color: AppStyle.text-secondary; horizontal-alignment: center; vertical-alignment: center; }
+                        Text { width: 140px; text: "Total Omzet (Rp)"; font-size: AppStyle.font-xs; font-weight: 700; color: AppStyle.text-secondary; horizontal-alignment: right; vertical-alignment: center; }
                     }
                 }
 
                 for tp[idx] in root.top_products: Rectangle {
-                    height: 30px; background: Math.mod(idx, 2) == 0 ? #ffffff : #f8fafc; border-width: 1px; border-color: #f1f5f9;
+                    height: AppStyle.row-height-dense; background: Math.mod(idx, 2) == 0 ? AppStyle.surface : AppStyle.row-alt; border-width: 1px; border-color: AppStyle.border;
                     HorizontalLayout {
                         padding-left: 10px; padding-right: 10px;
-                        Text { width: 60px; text: "#" + (idx + 1); font-size: 11px; font-weight: 700; color: #0284c7; vertical-alignment: center; }
-                        Text { width: 100px; text: tp.kode; font-size: 12px; color: #475569; vertical-alignment: center; }
-                        Text { horizontal-stretch: 1; text: tp.nama; font-size: 12px; font-weight: 600; color: #0f172a; vertical-alignment: center; }
-                        Text { width: 110px; text: "" + tp.qty; font-size: 12px; font-weight: 700; color: #0284c7; horizontal-alignment: center; vertical-alignment: center; }
-                        Text { width: 140px; text: "Rp " + tp.omzet; font-size: 12px; font-weight: 700; color: #15803d; horizontal-alignment: right; vertical-alignment: center; }
+                        Text { width: 60px; text: "#" + (idx + 1); font-size: AppStyle.font-xs; font-weight: 700; color: AppStyle.primary; vertical-alignment: center; }
+                        Text { width: 100px; text: tp.kode; font-size: AppStyle.font-sm; color: AppStyle.text-secondary; vertical-alignment: center; }
+                        Text { horizontal-stretch: 1; text: tp.nama; font-size: AppStyle.font-sm; font-weight: 600; color: AppStyle.text-primary; vertical-alignment: center; }
+                        Text { width: 110px; text: "" + tp.qty; font-size: AppStyle.font-sm; font-weight: 700; color: AppStyle.primary; horizontal-alignment: center; vertical-alignment: center; }
+                        Text { width: 140px; text: "Rp " + tp.omzet; font-size: AppStyle.font-sm; font-weight: 700; color: AppStyle.success; horizontal-alignment: right; vertical-alignment: center; }
                     }
                 }
 
                 if root.top_products.length == 0: Rectangle {
                     height: 120px;
-                    Text { text: "Belum ada data penjualan produk."; font-size: 12px; color: #94a3b8; horizontal-alignment: center; vertical-alignment: center; }
+                    Text { text: "Belum ada data penjualan produk."; font-size: AppStyle.font-sm; color: AppStyle.text-muted; horizontal-alignment: center; vertical-alignment: center; }
                 }
             }
         }

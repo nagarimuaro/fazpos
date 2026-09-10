@@ -1,4 +1,5 @@
 ﻿import { CartItemData, PendingGridData } from "../models.slint";
+import { AppStyle } from "../styles.slint";
 
 export component KasirView inherits Rectangle {
     background: transparent;
@@ -43,37 +44,37 @@ export component KasirView inherits Rectangle {
     callback hapus_pending(string);
 
     HorizontalLayout {
-        spacing: 12px;
+        spacing: AppStyle.space-md;
 
         // Kiri: Barcode, Member, dan Keranjang / Pending List
         VerticalLayout {
             horizontal-stretch: 3;
-            spacing: 8px;
+            spacing: AppStyle.space-sm;
 
             // Bar Atas: Scan Barcode & Member Scanner
             HorizontalLayout {
-                spacing: 8px;
+                spacing: AppStyle.space-sm;
 
                 // Scan Barcode Produk
                 Rectangle {
                     horizontal-stretch: 3;
-                    height: 44px;
-                    background: #ffffff;
+                    height: AppStyle.header-height;
+                    background: AppStyle.surface;
                     border-radius: 4px;
                     border-width: 1px;
-                    border-color: #cbd5e1;
+                    border-color: AppStyle.border-focus;
 
                     HorizontalLayout {
-                        padding-left: 12px;
-                        padding-right: 12px;
-                        spacing: 8px;
+                        padding-left: AppStyle.space-md;
+                        padding-right: AppStyle.space-md;
+                        spacing: AppStyle.space-sm;
 
-                        Text { text: "SCAN BARCODE:"; font-size: 11px; font-weight: 700; color: #0369a1; vertical-alignment: center; }
+                        Text { text: "SCAN BARCODE:"; font-size: AppStyle.font-xs; font-weight: 700; color: AppStyle.primary-dark; vertical-alignment: center; }
                         TextInput {
                             text <=> root.input_barcode;
-                            font-size: 14px;
+                            font-size: AppStyle.font-body;
                             font-weight: 600;
-                            color: #0f172a;
+                            color: AppStyle.text-primary;
                             vertical-alignment: center;
                             accepted => {
                                 root.cari_barcode(self.text);
@@ -86,23 +87,23 @@ export component KasirView inherits Rectangle {
                 // Scan / Cari Member
                 Rectangle {
                     horizontal-stretch: 2;
-                    height: 44px;
-                    background: #ffffff;
+                    height: AppStyle.header-height;
+                    background: AppStyle.surface;
                     border-radius: 4px;
                     border-width: 1px;
-                    border-color: #cbd5e1;
+                    border-color: AppStyle.border-focus;
 
                     HorizontalLayout {
-                        padding-left: 12px;
-                        padding-right: 12px;
-                        spacing: 8px;
+                        padding-left: AppStyle.space-md;
+                        padding-right: AppStyle.space-md;
+                        spacing: AppStyle.space-sm;
 
-                        Text { text: "MEMBER (KARTU/HP):"; font-size: 11px; font-weight: 700; color: #0f766e; vertical-alignment: center; }
+                        Text { text: "MEMBER (KARTU/HP):"; font-size: AppStyle.font-xs; font-weight: 700; color: #0f766e; vertical-alignment: center; }
                         TextInput {
                             text <=> root.input_member;
-                            font-size: 13px;
+                            font-size: AppStyle.font-body;
                             font-weight: 600;
-                            color: #0f172a;
+                            color: AppStyle.text-primary;
                             vertical-alignment: center;
                             accepted => {
                                 root.cari_member(self.text);
@@ -116,26 +117,26 @@ export component KasirView inherits Rectangle {
             // Member Badge & Tukar Poin Bar (Jika member terpasang)
             if root.is_member_attached: Rectangle {
                 height: 36px;
-                background: #f0fdf4;
+                background: AppStyle.success-bg;
                 border-radius: 4px;
                 border-width: 1px;
-                border-color: #86efac;
+                border-color: AppStyle.success-border;
 
                 HorizontalLayout {
-                    padding-left: 12px; padding-right: 12px;
+                    padding-left: AppStyle.space-md; padding-right: AppStyle.space-md;
                     alignment: space-between;
 
                     HorizontalLayout {
-                        spacing: 10px;
+                        spacing: AppStyle.space-sm;
                         alignment: start;
-                        Text { text: "MEMBER:"; font-size: 11px; font-weight: 700; color: #166534; vertical-alignment: center; }
-                        Text { text: root.member_nama + " (" + root.member_kode + ")"; font-size: 12px; font-weight: 700; color: #0f172a; vertical-alignment: center; }
-                        Rectangle { width: 1px; background: #86efac; }
-                        Text { text: "Saldo Poin: " + root.member_poin_saldo; font-size: 12px; font-weight: 700; color: #0369a1; vertical-alignment: center; }
+                        Text { text: "MEMBER:"; font-size: AppStyle.font-xs; font-weight: 700; color: AppStyle.success; vertical-alignment: center; }
+                        Text { text: root.member_nama + " (" + root.member_kode + ")"; font-size: AppStyle.font-sm; font-weight: 700; color: AppStyle.text-primary; vertical-alignment: center; }
+                        Rectangle { width: 1px; background: AppStyle.success-border; }
+                        Text { text: "Saldo Poin: " + root.member_poin_saldo; font-size: AppStyle.font-sm; font-weight: 700; color: AppStyle.primary-dark; vertical-alignment: center; }
 
                         if root.nilai_tukar_poin > 0: Text {
                             text: "• Terpotong Poin: Rp " + root.nilai_tukar_poin;
-                            font-size: 12px; font-weight: 700; color: #15803d; vertical-alignment: center;
+                            font-size: AppStyle.font-sm; font-weight: 700; color: AppStyle.success; vertical-alignment: center;
                         }
                     }
 
@@ -144,21 +145,21 @@ export component KasirView inherits Rectangle {
                         alignment: end;
 
                         if root.nilai_tukar_poin == 0: Rectangle {
-                            width: 80px; height: 24px; background: #0284c7; border-radius: 3px;
+                            width: 80px; height: 24px; background: AppStyle.primary; border-radius: 3px;
                             TouchArea { clicked => { root.tukar_poin(root.member_poin_saldo); } }
                             Text { text: "Tukar Semua"; font-size: 10px; font-weight: 700; color: #ffffff; horizontal-alignment: center; vertical-alignment: center; }
                         }
 
                         if root.nilai_tukar_poin > 0: Rectangle {
-                            width: 75px; height: 24px; background: #e2e8f0; border-radius: 3px;
+                            width: 75px; height: 24px; background: AppStyle.border; border-radius: 3px;
                             TouchArea { clicked => { root.batal_tukar_poin(); } }
-                            Text { text: "Batal Tukar"; font-size: 10px; font-weight: 600; color: #475569; horizontal-alignment: center; vertical-alignment: center; }
+                            Text { text: "Batal Tukar"; font-size: 10px; font-weight: 600; color: AppStyle.text-secondary; horizontal-alignment: center; vertical-alignment: center; }
                         }
 
                         Rectangle {
-                            width: 55px; height: 24px; background: #fee2e2; border-radius: 3px;
+                            width: 55px; height: 24px; background: AppStyle.danger-bg; border-radius: 3px; border-width: 1px; border-color: AppStyle.danger-border;
                             TouchArea { clicked => { root.lepas_member(); } }
-                            Text { text: "Lepas"; font-size: 10px; font-weight: 700; color: #dc2626; horizontal-alignment: center; vertical-alignment: center; }
+                            Text { text: "Lepas"; font-size: 10px; font-weight: 700; color: AppStyle.danger; horizontal-alignment: center; vertical-alignment: center; }
                         }
                     }
                 }
@@ -167,10 +168,10 @@ export component KasirView inherits Rectangle {
             // Toolbar Antrean (Hold / Recall)
             Rectangle {
                 height: 34px;
-                background: #ffffff;
+                background: AppStyle.surface;
                 border-radius: 4px;
                 border-width: 1px;
-                border-color: #e2e8f0;
+                border-color: AppStyle.border;
 
                 HorizontalLayout {
                     padding-left: 10px; padding-right: 10px;
@@ -179,7 +180,7 @@ export component KasirView inherits Rectangle {
                     HorizontalLayout {
                         spacing: 8px;
                         alignment: start;
-                        Text { text: root.show_pending_list ? "DAFTAR ANTREAN TERTUNDA" : "KERANJANG TRANSAKSI"; font-size: 11px; font-weight: 700; color: #475569; vertical-alignment: center; }
+                        Text { text: root.show_pending_list ? "DAFTAR ANTREAN TERTUNDA" : "KERANJANG TRANSAKSI"; font-size: AppStyle.font-xs; font-weight: 700; color: AppStyle.text-secondary; vertical-alignment: center; }
                     }
 
                     HorizontalLayout {
@@ -188,19 +189,21 @@ export component KasirView inherits Rectangle {
 
                         // Tombol Tahan Antrean (Hold)
                         Rectangle {
-                            width: 125px; height: 26px; background: #fef3c7; border-radius: 3px; border-width: 1px; border-color: #fde68a;
+                            width: 125px; height: 26px; background: AppStyle.warning-bg; border-radius: 3px; border-width: 1px; border-color: AppStyle.warning-border;
                             TouchArea { clicked => { root.hold_transaksi("Antrean kasir"); } }
-                            Text { text: "HOLD ANTREAN (F7)"; font-size: 10px; font-weight: 700; color: #92400e; horizontal-alignment: center; vertical-alignment: center; }
+                            Text { text: "HOLD ANTREAN (F7)"; font-size: 10px; font-weight: 700; color: AppStyle.warning; horizontal-alignment: center; vertical-alignment: center; }
                         }
 
                         // Tombol Daftar Pending (Recall)
                         Rectangle {
-                            width: 140px; height: 26px; background: root.show_pending_list ? #0284c7 : #f1f5f9; border-radius: 3px; border-width: 1px; border-color: #cbd5e1;
+                            width: 140px; height: 26px;
+                            background: root.show_pending_list ? AppStyle.primary : AppStyle.bg;
+                            border-radius: 3px; border-width: 1px; border-color: AppStyle.border;
                             TouchArea { clicked => { root.show_pending_list = !root.show_pending_list; } }
                             Text {
                                 text: root.show_pending_list ? "KEMBALI KE KERANJANG" : ("ANTREAN TERTAHAN (" + root.pending_items.length + ")");
                                 font-size: 10px; font-weight: 700;
-                                color: root.show_pending_list ? #ffffff : #334155;
+                                color: root.show_pending_list ? #ffffff : AppStyle.text-secondary;
                                 horizontal-alignment: center; vertical-alignment: center;
                             }
                         }
@@ -210,10 +213,10 @@ export component KasirView inherits Rectangle {
 
             // Konten Utama: Daftar Pending vs Keranjang Kasir
             if root.show_pending_list: Rectangle {
-                background: #ffffff;
+                background: AppStyle.surface;
                 border-radius: 4px;
                 border-width: 1px;
-                border-color: #e2e8f0;
+                border-color: AppStyle.border;
                 vertical-stretch: 1;
 
                 VerticalLayout {
@@ -222,38 +225,38 @@ export component KasirView inherits Rectangle {
 
                     // Table Header Pending
                     Rectangle {
-                        height: 30px; background: #f8fafc; border-width: 1px; border-color: #e2e8f0;
+                        height: 30px; background: AppStyle.bg; border-width: 1px; border-color: AppStyle.border;
                         HorizontalLayout {
                             padding-left: 8px; padding-right: 8px;
-                            Text { width: 35px; text: "No."; font-size: 11px; font-weight: 700; color: #475569; vertical-alignment: center; }
-                            Text { width: 140px; text: "NO. HOLD"; font-size: 11px; font-weight: 700; color: #475569; vertical-alignment: center; }
-                            Text { width: 140px; text: "WAKTU"; font-size: 11px; font-weight: 700; color: #475569; vertical-alignment: center; }
-                            Text { width: 100px; text: "MEMBER"; font-size: 11px; font-weight: 700; color: #475569; vertical-alignment: center; }
-                            Text { horizontal-stretch: 1; text: "KETERANGAN"; font-size: 11px; font-weight: 700; color: #475569; vertical-alignment: center; }
-                            Text { width: 110px; text: "TOTAL"; font-size: 11px; font-weight: 700; color: #475569; horizontal-alignment: right; vertical-alignment: center; }
-                            Text { width: 140px; text: "AKSI"; font-size: 11px; font-weight: 700; color: #475569; horizontal-alignment: center; vertical-alignment: center; }
+                            Text { width: 35px; text: "No."; font-size: AppStyle.font-xs; font-weight: 700; color: AppStyle.text-secondary; vertical-alignment: center; }
+                            Text { width: 140px; text: "NO. HOLD"; font-size: AppStyle.font-xs; font-weight: 700; color: AppStyle.text-secondary; vertical-alignment: center; }
+                            Text { width: 140px; text: "WAKTU"; font-size: AppStyle.font-xs; font-weight: 700; color: AppStyle.text-secondary; vertical-alignment: center; }
+                            Text { width: 100px; text: "MEMBER"; font-size: AppStyle.font-xs; font-weight: 700; color: AppStyle.text-secondary; vertical-alignment: center; }
+                            Text { horizontal-stretch: 1; text: "KETERANGAN"; font-size: AppStyle.font-xs; font-weight: 700; color: AppStyle.text-secondary; vertical-alignment: center; }
+                            Text { width: 110px; text: "TOTAL"; font-size: AppStyle.font-xs; font-weight: 700; color: AppStyle.text-secondary; horizontal-alignment: right; vertical-alignment: center; }
+                            Text { width: 140px; text: "AKSI"; font-size: AppStyle.font-xs; font-weight: 700; color: AppStyle.text-secondary; horizontal-alignment: center; vertical-alignment: center; }
                         }
                     }
 
                     // Table Rows Pending
                     for p[idx] in root.pending_items: Rectangle {
-                        height: 34px;
-                        background: Math.mod(idx, 2) == 0 ? #ffffff : #f8fafc;
-                        border-width: 1px; border-color: #f1f5f9;
+                        height: AppStyle.row-height-dense;
+                        background: Math.mod(idx, 2) == 0 ? AppStyle.surface : AppStyle.row-alt;
+                        border-width: 1px; border-color: AppStyle.border;
 
                         HorizontalLayout {
                             padding-left: 8px; padding-right: 8px;
-                            Text { width: 35px; text: "" + (idx + 1); font-size: 11px; color: #64748b; vertical-alignment: center; }
-                            Text { width: 140px; text: p.faktur; font-size: 12px; font-weight: 600; color: #0284c7; vertical-alignment: center; }
-                            Text { width: 140px; text: p.tanggal; font-size: 11px; color: #64748b; vertical-alignment: center; }
-                            Text { width: 100px; text: p.pelanggan; font-size: 11px; color: #334155; vertical-alignment: center; }
-                            Text { horizontal-stretch: 1; text: p.keterangan; font-size: 11px; color: #64748b; vertical-alignment: center; }
-                            Text { width: 110px; text: "Rp " + p.total; font-size: 12px; font-weight: 700; color: #15803d; horizontal-alignment: right; vertical-alignment: center; }
+                            Text { width: 35px; text: "" + (idx + 1); font-size: AppStyle.font-xs; color: AppStyle.text-muted; vertical-alignment: center; }
+                            Text { width: 140px; text: p.faktur; font-size: AppStyle.font-sm; font-weight: 600; color: AppStyle.primary; vertical-alignment: center; }
+                            Text { width: 140px; text: p.tanggal; font-size: AppStyle.font-xs; color: AppStyle.text-muted; vertical-alignment: center; }
+                            Text { width: 100px; text: p.pelanggan; font-size: AppStyle.font-xs; color: AppStyle.text-secondary; vertical-alignment: center; }
+                            Text { horizontal-stretch: 1; text: p.keterangan; font-size: AppStyle.font-xs; color: AppStyle.text-muted; vertical-alignment: center; }
+                            Text { width: 110px; text: "Rp " + p.total; font-size: AppStyle.font-sm; font-weight: 700; color: AppStyle.success; horizontal-alignment: right; vertical-alignment: center; }
 
                             HorizontalLayout {
                                 width: 140px; alignment: center; spacing: 4px;
                                 Rectangle {
-                                    width: 70px; height: 22px; background: #16a34a; border-radius: 3px;
+                                    width: 70px; height: 22px; background: AppStyle.success; border-radius: 3px;
                                     TouchArea { clicked => {
                                         root.recall_transaksi(p.id);
                                         root.show_pending_list = false;
@@ -261,9 +264,9 @@ export component KasirView inherits Rectangle {
                                     Text { text: "Panggil"; font-size: 10px; font-weight: 700; color: #ffffff; horizontal-alignment: center; vertical-alignment: center; }
                                 }
                                 Rectangle {
-                                    width: 50px; height: 22px; background: #fee2e2; border-radius: 3px;
+                                    width: 50px; height: 22px; background: AppStyle.danger-bg; border-radius: 3px; border-width: 1px; border-color: AppStyle.danger-border;
                                     TouchArea { clicked => { root.hapus_pending(p.id); } }
-                                    Text { text: "Hapus"; font-size: 10px; font-weight: 700; color: #dc2626; horizontal-alignment: center; vertical-alignment: center; }
+                                    Text { text: "Hapus"; font-size: 10px; font-weight: 700; color: AppStyle.danger; horizontal-alignment: center; vertical-alignment: center; }
                                 }
                             }
                         }
@@ -271,17 +274,17 @@ export component KasirView inherits Rectangle {
 
                     if root.pending_items.length == 0: Rectangle {
                         height: 200px;
-                        Text { text: "Tidak ada transaksi yang ditahan (Hold)."; font-size: 13px; color: #94a3b8; horizontal-alignment: center; vertical-alignment: center; }
+                        Text { text: "Tidak ada transaksi yang ditahan (Hold)."; font-size: AppStyle.font-body; color: AppStyle.text-muted; horizontal-alignment: center; vertical-alignment: center; }
                     }
                 }
             }
 
             // Keranjang Kasir Biasa
             if !root.show_pending_list: Rectangle {
-                background: #ffffff;
+                background: AppStyle.surface;
                 border-radius: 4px;
                 border-width: 1px;
-                border-color: #e2e8f0;
+                border-color: AppStyle.border;
                 vertical-stretch: 1;
 
                 VerticalLayout {
@@ -291,36 +294,36 @@ export component KasirView inherits Rectangle {
                     // Table Header
                     Rectangle {
                         height: 32px;
-                        background: #f8fafc;
+                        background: AppStyle.bg;
                         border-width: 1px;
-                        border-color: #e2e8f0;
+                        border-color: AppStyle.border;
 
                         HorizontalLayout {
                             padding-left: 10px; padding-right: 10px;
-                            Text { width: 35px; text: "No."; font-size: 11px; font-weight: 700; color: #475569; vertical-alignment: center; }
-                            Text { width: 95px; text: "KODE"; font-size: 11px; font-weight: 700; color: #475569; vertical-alignment: center; }
-                            Text { horizontal-stretch: 1; text: "NAMA BARANG"; font-size: 11px; font-weight: 700; color: #475569; vertical-alignment: center; }
-                            Text { width: 65px; text: "SATUAN"; font-size: 11px; font-weight: 700; color: #475569; vertical-alignment: center; }
-                            Text { width: 110px; text: "QTY"; font-size: 11px; font-weight: 700; color: #475569; horizontal-alignment: center; vertical-alignment: center; }
-                            Text { width: 95px; text: "HARGA"; font-size: 11px; font-weight: 700; color: #475569; horizontal-alignment: right; vertical-alignment: center; }
-                            Text { width: 105px; text: "SUBTOTAL"; font-size: 11px; font-weight: 700; color: #475569; horizontal-alignment: right; vertical-alignment: center; }
-                            Text { width: 35px; text: ""; font-size: 11px; }
+                            Text { width: 35px; text: "No."; font-size: AppStyle.font-xs; font-weight: 700; color: AppStyle.text-secondary; vertical-alignment: center; }
+                            Text { width: 95px; text: "KODE"; font-size: AppStyle.font-xs; font-weight: 700; color: AppStyle.primary-dark; vertical-alignment: center; }
+                            Text { horizontal-stretch: 1; text: "NAMA BARANG"; font-size: AppStyle.font-xs; font-weight: 700; color: AppStyle.text-secondary; vertical-alignment: center; }
+                            Text { width: 65px; text: "SATUAN"; font-size: AppStyle.font-xs; font-weight: 700; color: AppStyle.text-secondary; vertical-alignment: center; }
+                            Text { width: 110px; text: "QTY"; font-size: AppStyle.font-xs; font-weight: 700; color: AppStyle.text-secondary; horizontal-alignment: center; vertical-alignment: center; }
+                            Text { width: 95px; text: "HARGA"; font-size: AppStyle.font-xs; font-weight: 700; color: AppStyle.text-secondary; horizontal-alignment: right; vertical-alignment: center; }
+                            Text { width: 105px; text: "SUBTOTAL"; font-size: AppStyle.font-xs; font-weight: 700; color: AppStyle.text-secondary; horizontal-alignment: right; vertical-alignment: center; }
+                            Text { width: 35px; text: ""; font-size: AppStyle.font-xs; }
                         }
                     }
 
                     // Table Rows
                     for item[idx] in root.items: Rectangle {
-                        height: 34px;
-                        background: Math.mod(idx, 2) == 0 ? #ffffff : #f8fafc;
+                        height: AppStyle.row-height-dense;
+                        background: Math.mod(idx, 2) == 0 ? AppStyle.surface : AppStyle.row-alt;
                         border-width: 1px;
-                        border-color: #f1f5f9;
+                        border-color: AppStyle.border;
 
                         HorizontalLayout {
                             padding-left: 10px; padding-right: 10px;
-                            Text { width: 35px; text: "" + (idx + 1); font-size: 11px; color: #64748b; vertical-alignment: center; }
-                            Text { width: 95px; text: item.kode; font-size: 12px; font-weight: 600; color: #0284c7; vertical-alignment: center; }
-                            Text { horizontal-stretch: 1; text: item.nama; font-size: 12px; font-weight: 600; color: #0f172a; vertical-alignment: center; }
-                            Text { width: 65px; text: item.satuan; font-size: 12px; color: #475569; vertical-alignment: center; }
+                            Text { width: 35px; text: "" + (idx + 1); font-size: AppStyle.font-xs; color: AppStyle.text-muted; vertical-alignment: center; }
+                            Text { width: 95px; text: item.kode; font-size: AppStyle.font-sm; font-weight: 600; color: AppStyle.primary; vertical-alignment: center; }
+                            Text { horizontal-stretch: 1; text: item.nama; font-size: AppStyle.font-sm; font-weight: 600; color: AppStyle.text-primary; vertical-alignment: center; }
+                            Text { width: 65px; text: item.satuan; font-size: AppStyle.font-sm; color: AppStyle.text-secondary; vertical-alignment: center; }
 
                             // Qty Buttons (- / Qty / +)
                             HorizontalLayout {
@@ -329,28 +332,28 @@ export component KasirView inherits Rectangle {
                                 spacing: 4px;
 
                                 Rectangle {
-                                    width: 22px; height: 22px; background: #e2e8f0; border-radius: 3px;
+                                    width: 22px; height: 22px; background: AppStyle.border; border-radius: 3px;
                                     TouchArea { clicked => { root.ubah_qty(idx, item.jumlah - 1.0); } }
-                                    Text { text: "-"; font-size: 13px; font-weight: 700; color: #1e293b; horizontal-alignment: center; vertical-alignment: center; }
+                                    Text { text: "-"; font-size: AppStyle.font-body; font-weight: 700; color: AppStyle.text-primary; horizontal-alignment: center; vertical-alignment: center; }
                                 }
-                                Text { text: "" + item.jumlah; font-size: 12px; font-weight: 700; color: #0f172a; vertical-alignment: center; width: 40px; horizontal-alignment: center; }
+                                Text { text: "" + item.jumlah; font-size: AppStyle.font-sm; font-weight: 700; color: AppStyle.text-primary; vertical-alignment: center; width: 40px; horizontal-alignment: center; }
                                 Rectangle {
-                                    width: 22px; height: 22px; background: #e2e8f0; border-radius: 3px;
+                                    width: 22px; height: 22px; background: AppStyle.border; border-radius: 3px;
                                     TouchArea { clicked => { root.ubah_qty(idx, item.jumlah + 1.0); } }
-                                    Text { text: "+"; font-size: 13px; font-weight: 700; color: #1e293b; horizontal-alignment: center; vertical-alignment: center; }
+                                    Text { text: "+"; font-size: AppStyle.font-body; font-weight: 700; color: AppStyle.text-primary; horizontal-alignment: center; vertical-alignment: center; }
                                 }
                             }
 
-                            Text { width: 95px; text: "" + item.harga; font-size: 12px; color: #334155; horizontal-alignment: right; vertical-alignment: center; }
-                            Text { width: 105px; text: "" + item.subtotal; font-size: 13px; font-weight: 700; color: #15803d; horizontal-alignment: right; vertical-alignment: center; }
+                            Text { width: 95px; text: "" + item.harga; font-size: AppStyle.font-sm; color: AppStyle.text-secondary; horizontal-alignment: right; vertical-alignment: center; }
+                            Text { width: 105px; text: "" + item.subtotal; font-size: AppStyle.font-body; font-weight: 700; color: AppStyle.success; horizontal-alignment: right; vertical-alignment: center; }
 
                             // Tombol Hapus Baris
                             Rectangle {
                                 width: 35px;
                                 Rectangle {
-                                    width: 20px; height: 20px; background: #fee2e2; border-radius: 3px;
+                                    width: 20px; height: 20px; background: AppStyle.danger-bg; border-radius: 3px; border-width: 1px; border-color: AppStyle.danger-border;
                                     TouchArea { clicked => { root.hapus_item(idx); } }
-                                    Text { text: "X"; font-size: 10px; font-weight: 700; color: #dc2626; horizontal-alignment: center; vertical-alignment: center; }
+                                    Text { text: "X"; font-size: 10px; font-weight: 700; color: AppStyle.danger; horizontal-alignment: center; vertical-alignment: center; }
                                 }
                             }
                         }
@@ -358,7 +361,7 @@ export component KasirView inherits Rectangle {
 
                     if root.items.length == 0: Rectangle {
                         height: 240px;
-                        Text { text: "Keranjang kasir kosong. Scan barcode atau masukkan kode produk di atas."; font-size: 13px; color: #94a3b8; horizontal-alignment: center; vertical-alignment: center; }
+                        Text { text: "Keranjang kasir kosong. Scan barcode atau masukkan kode produk di atas."; font-size: AppStyle.font-body; color: AppStyle.text-muted; horizontal-alignment: center; vertical-alignment: center; }
                     }
                 }
             }
@@ -367,81 +370,81 @@ export component KasirView inherits Rectangle {
         // Kanan: Panel Kasir (Total, Metode Bayar, Input Tunai, Kembalian)
         VerticalLayout {
             horizontal-stretch: 1;
-            spacing: 8px;
+            spacing: AppStyle.space-sm;
 
             // Display Total Besar
             Rectangle {
-                background: #f0fdf4;
+                background: AppStyle.success-bg;
                 border-radius: 4px;
                 border-width: 1px;
-                border-color: #bbf7d0;
+                border-color: AppStyle.success-border;
                 VerticalLayout {
-                    padding: 14px;
+                    padding: AppStyle.space-md;
                     spacing: 4px;
-                    Text { text: "TOTAL TAGIHAN"; font-size: 11px; font-weight: 700; color: #166534; }
+                    Text { text: "TOTAL TAGIHAN"; font-size: AppStyle.font-xs; font-weight: 700; color: AppStyle.success; }
                     Text {
                         text: "Rp " + Math.max(0.0, root.total_belanja - root.nilai_tukar_poin);
-                        font-size: 30px; font-weight: 800; color: #15803d;
+                        font-size: AppStyle.font-display; font-weight: 800; color: AppStyle.success;
                     }
                     if root.nilai_tukar_poin > 0: Text {
                         text: "(Hemat Rp " + root.nilai_tukar_poin + " dari Poin Member)";
-                        font-size: 11px; font-weight: 600; color: #15803d;
+                        font-size: AppStyle.font-xs; font-weight: 600; color: AppStyle.success;
                     }
                 }
             }
 
             // Form Pembayaran
             Rectangle {
-                background: #ffffff;
+                background: AppStyle.surface;
                 border-radius: 4px;
                 border-width: 1px;
-                border-color: #cbd5e1;
+                border-color: AppStyle.border-focus;
                 VerticalLayout {
-                    padding: 14px;
+                    padding: AppStyle.space-md;
                     spacing: 10px;
 
                     // Pemilihan Metode Bayar
                     VerticalLayout {
                         spacing: 4px;
-                        Text { text: "Metode Pembayaran:"; font-size: 11px; font-weight: 600; color: #334155; }
+                        Text { text: "Metode Pembayaran:"; font-size: AppStyle.font-xs; font-weight: 600; color: AppStyle.text-secondary; }
                         HorizontalLayout {
                             spacing: 4px;
                             Rectangle {
                                 horizontal-stretch: 1; height: 28px;
-                                background: root.metode_bayar == "TUNAI" ? #0284c7 : #f1f5f9;
+                                background: root.metode_bayar == "TUNAI" ? AppStyle.primary : AppStyle.bg;
                                 border-radius: 3px;
                                 TouchArea { clicked => { root.metode_bayar = "TUNAI"; } }
-                                Text { text: "TUNAI"; font-size: 10px; font-weight: 700; color: root.metode_bayar == "TUNAI" ? #ffffff : #475569; horizontal-alignment: center; vertical-alignment: center; }
+                                Text { text: "TUNAI"; font-size: 10px; font-weight: 700; color: root.metode_bayar == "TUNAI" ? #ffffff : AppStyle.text-secondary; horizontal-alignment: center; vertical-alignment: center; }
                             }
                             Rectangle {
                                 horizontal-stretch: 1; height: 28px;
-                                background: root.metode_bayar == "NONTUNAI" ? #0284c7 : #f1f5f9;
+                                background: root.metode_bayar == "NONTUNAI" ? AppStyle.primary : AppStyle.bg;
                                 border-radius: 3px;
                                 TouchArea { clicked => { root.metode_bayar = "NONTUNAI"; } }
-                                Text { text: "NON-TUNAI"; font-size: 10px; font-weight: 700; color: root.metode_bayar == "NONTUNAI" ? #ffffff : #475569; horizontal-alignment: center; vertical-alignment: center; }
+                                Text { text: "NON-TUNAI"; font-size: 10px; font-weight: 700; color: root.metode_bayar == "NONTUNAI" ? #ffffff : AppStyle.text-secondary; horizontal-alignment: center; vertical-alignment: center; }
                             }
                             Rectangle {
                                 horizontal-stretch: 1; height: 28px;
-                                background: root.metode_bayar == "KREDIT" ? #d97706 : #f1f5f9;
+                                background: root.metode_bayar == "KREDIT" ? AppStyle.warning : AppStyle.bg;
                                 border-radius: 3px;
                                 TouchArea { clicked => { root.metode_bayar = "KREDIT"; } }
-                                Text { text: "KREDIT"; font-size: 10px; font-weight: 700; color: root.metode_bayar == "KREDIT" ? #ffffff : #475569; horizontal-alignment: center; vertical-alignment: center; }
+                                Text { text: "KREDIT"; font-size: 10px; font-weight: 700; color: root.metode_bayar == "KREDIT" ? #ffffff : AppStyle.text-secondary; horizontal-alignment: center; vertical-alignment: center; }
                             }
                         }
                     }
 
                     VerticalLayout {
                         spacing: 4px;
-                        Text { text: root.metode_bayar == "TUNAI" ? "Uang Diterima (Tunai):" : "Nominal Bayar:"; font-size: 11px; font-weight: 600; color: #334155; }
+                        Text { text: root.metode_bayar == "TUNAI" ? "Uang Diterima (Tunai):" : "Nominal Bayar:"; font-size: AppStyle.font-xs; font-weight: 600; color: AppStyle.text-secondary; }
                         Rectangle {
-                            height: 38px; background: #f8fafc; border-radius: 4px; border-width: 1px; border-color: #cbd5e1;
+                            height: AppStyle.input-height; background: AppStyle.bg; border-radius: 4px; border-width: 1px; border-color: AppStyle.border-focus;
                             HorizontalLayout {
-                                padding-left: 10px; padding-right: 10px;
+                                padding-left: AppStyle.space-sm; padding-right: AppStyle.space-sm;
                                 input_tunai := TextInput {
                                     text: "0";
                                     font-size: 16px;
                                     font-weight: 700;
-                                    color: #0f172a;
+                                    color: AppStyle.text-primary;
                                     vertical-alignment: center;
                                 }
                             }
@@ -450,31 +453,31 @@ export component KasirView inherits Rectangle {
 
                     if root.metode_bayar == "TUNAI": VerticalLayout {
                         spacing: 2px;
-                        Text { text: "Kembalian:"; font-size: 11px; color: #64748b; }
-                        Text { text: "Rp " + root.kembalian; font-size: 20px; font-weight: 800; color: #0284c7; }
+                        Text { text: "Kembalian:"; font-size: AppStyle.font-xs; color: AppStyle.text-muted; }
+                        Text { text: "Rp " + root.kembalian; font-size: 20px; font-weight: 800; color: AppStyle.primary; }
                     }
 
                     if root.metode_bayar == "KREDIT": Rectangle {
-                        height: 28px; background: #fef3c7; border-radius: 3px;
-                        Text { text: "Transaksi dicatat sebagai Piutang Member"; font-size: 10px; font-weight: 600; color: #92400e; horizontal-alignment: center; vertical-alignment: center; }
+                        height: 28px; background: AppStyle.warning-bg; border-radius: 3px; border-width: 1px; border-color: AppStyle.warning-border;
+                        Text { text: "Transaksi dicatat sebagai Piutang Member"; font-size: 10px; font-weight: 600; color: AppStyle.warning; horizontal-alignment: center; vertical-alignment: center; }
                     }
 
                     Rectangle {
-                        height: 44px; background: #0284c7; border-radius: 4px;
+                        height: AppStyle.button-height-primary; background: AppStyle.primary; border-radius: 4px;
                         TouchArea { clicked => {
                             root.bayar_tunai = input_tunai.text.to-float();
                             root.proses_bayar(input_tunai.text.to-float());
                         } }
-                        Text { text: "SIMPAN TRANSAKSI (F5)"; font-size: 12px; font-weight: 700; color: #ffffff; horizontal-alignment: center; vertical-alignment: center; }
+                        Text { text: "SIMPAN TRANSAKSI (F5)"; font-size: AppStyle.font-sm; font-weight: 700; color: #ffffff; horizontal-alignment: center; vertical-alignment: center; }
                     }
 
                     Rectangle {
-                        height: 34px; background: #e2e8f0; border-radius: 4px;
+                        height: AppStyle.button-height-secondary; background: AppStyle.border; border-radius: 4px;
                         TouchArea { clicked => {
                             input_tunai.text = "0";
                             root.reset_transaksi();
                         } }
-                        Text { text: "BATALKAN TRANSAKSI"; font-size: 11px; font-weight: 600; color: #475569; horizontal-alignment: center; vertical-alignment: center; }
+                        Text { text: "BATALKAN TRANSAKSI"; font-size: AppStyle.font-xs; font-weight: 600; color: AppStyle.text-secondary; horizontal-alignment: center; vertical-alignment: center; }
                     }
                 }
             }
