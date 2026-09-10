@@ -70,8 +70,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    // Inisialisasi data antrean tertahan (pending) di kasir
+    // Inisialisasi data antrean tertahan (pending) & katalog barang di kasir
     muat_tabel_pending(&main_window, &db_ref.borrow(), &cabang_id, &device_id);
+    muat_tabel_barang(&main_window, &db_ref.borrow(), &cabang_id, "");
 
     let window_handle = main_window.as_weak();
 

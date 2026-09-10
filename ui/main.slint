@@ -524,9 +524,10 @@ export component MainWindow inherits Window {
             if root.active_view == 0: KasirView {
                 input_barcode <=> root.input_barcode;
                 items: root.cart_items;
+                catalog_products: root.products;
                 total_belanja: root.total_belanja;
-                    bayar_tunai <=> root.bayar_tunai;
-                    kembalian: root.kembalian;
+                bayar_tunai <=> root.bayar_tunai;
+                kembalian: root.kembalian;
 
                     member_nama: root.member_nama;
                     member_kode: root.member_kode;
