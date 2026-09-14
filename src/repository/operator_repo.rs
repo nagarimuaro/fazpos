@@ -103,6 +103,41 @@ impl<'a> OperatorRepo<'a> {
     }
 
     pub fn simpan(&self, op: &DOperator) -> Result<()> {
+        // Proteksi: kode admin permanen tidak boleh diubah kodenya
+        if let Some(existing) = self.cari_by_id(&op.id)? {
+            if existing.kode == "admin" && op.kode != "admin" {
+                return Err(rusqlite::Error::ToSqlConversionFailure(Box::new(
+                    std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        "Username admin bersifat permanen dan tidak dapat diubah",
+                    ),
+                )));
+            }
+        }
+
+        // Proteksi: User admin permanen hanya bisa diubah password-nya saja
+        if op.kode == "admin" {
+            if let Some(existing) = self.cari_by_kode(&op.cabang_id, "admin")? {
+                if existing.id != op.id {
+                    return Err(rusqlite::Error::ToSqlConversionFailure(Box::new(
+                        std::io::Error::new(
+                            std::io::ErrorKind::Other,
+                            "User admin sudah ada dan bersifat unik serta permanen",
+                        ),
+                    )));
+                }
+                self.conn.execute(
+                    r#"
+                    UPDATE doperator
+                    SET password_hash = ?1, updated_at = CURRENT_TIMESTAMP
+                    WHERE cabang_id = ?2 AND kode = 'admin';
+                    "#,
+                    params![op.password_hash, op.cabang_id],
+                )?;
+                return Ok(());
+            }
+        }
+
         self.conn.execute(
             r#"
             INSERT INTO doperator (
@@ -133,7 +168,30 @@ impl<'a> OperatorRepo<'a> {
     }
 
     pub fn hapus(&self, id: &str) -> Result<()> {
+        if let Some(op) = self.cari_by_id(id)? {
+            if op.kode == "admin" {
+                return Err(rusqlite::Error::ToSqlConversionFailure(Box::new(
+                    std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        "User admin permanen tidak dapat dihapus",
+                    ),
+                )));
+            }
+        }
         self.conn.execute("DELETE FROM doperator WHERE id = ?1;", params![id])?;
         Ok(())
+    }
+
+    pub fn ubah_password(&self, cabang_id: &str, kode: &str, password_baru: &str) -> Result<bool> {
+        let password_hash = Self::hash_password(password_baru);
+        let updated = self.conn.execute(
+            r#"
+            UPDATE doperator
+            SET password_hash = ?1, updated_at = CURRENT_TIMESTAMP
+            WHERE cabang_id = ?2 AND kode = ?3;
+            "#,
+            params![password_hash, cabang_id, kode],
+        )?;
+        Ok(updated > 0)
     }
 }

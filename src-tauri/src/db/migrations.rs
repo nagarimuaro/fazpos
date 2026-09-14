@@ -585,6 +585,15 @@ pub fn jalankan_migrasi(conn: &Connection) -> Result<()> {
     let _ = conn.execute("ALTER TABLE tshift ADD COLUMN total_kas_keluar REAL DEFAULT 0;", []);
     let _ = conn.execute("ALTER TABLE tshift ADD COLUMN total_retur_tunai REAL DEFAULT 0;", []);
     let _ = conn.execute("ALTER TABLE tshift ADD COLUMN kode TEXT;", []);
+    let _ = conn.execute(
+        r#"
+        CREATE TABLE IF NOT EXISTS app_settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        );
+        "#,
+        [],
+    );
 
     Ok(())
 }

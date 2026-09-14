@@ -53,13 +53,13 @@
         </div>
         <div>
           <div class="font-bold text-slate-900 text-sm font-sans">Konfirmasi Tutup Kasir</div>
-          <div class="text-xs text-slate-500 font-sans">Kembali ke Halaman Riwayat Transaksi</div>
+          <div class="text-xs text-slate-500 font-sans">Kembali ke Halaman Riwayat Penjualan</div>
         </div>
       </div>
 
       <!-- Body -->
       <div class="p-5 text-xs text-slate-700 font-sans leading-relaxed">
-        Apakah Anda yakin ingin keluar dari sesi kasir aktif dan kembali ke daftar transaksi? Keranjang belanja aktif akan tetap tersimpan.
+        Apakah Anda yakin ingin keluar dari sesi kasir aktif dan kembali ke daftar penjualan? Keranjang belanja aktif akan tetap tersimpan.
       </div>
 
       <!-- Footer Buttons -->

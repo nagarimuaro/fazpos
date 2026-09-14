@@ -106,4 +106,68 @@ impl<'a> CabangRepo<'a> {
         })
         .optional()
     }
+
+    pub fn semua_cabang(&self) -> Result<Vec<Cabang>> {
+        let mut stmt = self.conn.prepare(
+            r#"
+            SELECT id, kode, nama, alamat, telepon, is_pusat, sync_status, created_at, updated_at
+            FROM cabang
+            ORDER BY is_pusat DESC, kode ASC;
+            "#,
+        )?;
+
+        let rows = stmt.query_map([], |row| {
+            let is_pusat_int: i32 = row.get(5)?;
+            Ok(Cabang {
+                id: row.get(0)?,
+                kode: row.get(1)?,
+                nama: row.get(2)?,
+                alamat: row.get(3)?,
+                telepon: row.get(4)?,
+                is_pusat: is_pusat_int == 1,
+                sync_status: row.get(6)?,
+                created_at: None,
+                updated_at: None,
+            })
+        })?;
+
+        let mut list = Vec::new();
+        for r in rows {
+            list.push(r?);
+        }
+        Ok(list)
+    }
+
+    pub fn semua_device(&self, cabang_id: &str) -> Result<Vec<Device>> {
+        let mut stmt = self.conn.prepare(
+            r#"
+            SELECT id, cabang_id, kode, nama, role, machine_id, ip_address, is_active, created_at, updated_at
+            FROM device
+            WHERE cabang_id = ?1
+            ORDER BY role DESC, kode ASC;
+            "#,
+        )?;
+
+        let rows = stmt.query_map(params![cabang_id], |row| {
+            let is_active_int: i32 = row.get(7)?;
+            Ok(Device {
+                id: row.get(0)?,
+                cabang_id: row.get(1)?,
+                kode: row.get(2)?,
+                nama: row.get(3)?,
+                role: row.get(4)?,
+                machine_id: row.get(5)?,
+                ip_address: row.get(6)?,
+                is_active: is_active_int == 1,
+                created_at: None,
+                updated_at: None,
+            })
+        })?;
+
+        let mut list = Vec::new();
+        for r in rows {
+            list.push(r?);
+        }
+        Ok(list)
+    }
 }

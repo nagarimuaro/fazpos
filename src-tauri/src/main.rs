@@ -1,17 +1,22 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use std::path::Path;
 use std::sync::Mutex;
 use chrono::Local;
+use rusqlite::OptionalExtension;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
+use fazpos::backup::sqlite_backup::BackupManager;
 use fazpos::db::Database;
 use fazpos::domain::barang::DBarang;
 use fazpos::domain::cabang::{Cabang, Device};
+use fazpos::domain::operator::DOperator;
 use fazpos::license::machine_id::MachineId;
 use fazpos::license::verification::{LicenseStatus, LicenseVerifier};
 use fazpos::repository::barang_repo::BarangRepo;
 use fazpos::repository::cabang_repo::CabangRepo;
+use fazpos::repository::operator_repo::OperatorRepo;
 use fazpos::repository::pelanggan_repo::PelangganRepo;
 use fazpos::repository::pending_repo::PendingRepo;
 use fazpos::services::kasir_service::KasirService;
@@ -23,6 +28,114 @@ pub struct AppState {
     pub cabang_id: String,
     pub device_id: String,
     pub shift_id: String,
+    pub current_operator: Mutex<Option<OperatorDTO>>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct OperatorDTO {
+    pub id: String,
+    pub cabang_id: String,
+    pub kode: String,
+    pub nama: String,
+    pub role: String,
+    pub is_admin: bool,
+    pub is_aktif: bool,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct SettingsDTO {
+    pub toko_nama: String,
+    pub toko_alamat: String,
+    pub toko_telepon: String,
+    pub header_nota: String,
+    pub footer_nota: String,
+    pub printer_nama: String,
+    pub printer_port: String,
+    pub kertas_lebar: String,
+    pub auto_kick_drawer: bool,
+    pub ppn_aktif: bool,
+    pub ppn_persen: f64,
+    pub wa_notif_nomor: String,
+    pub wa_notif_jam: String,
+    pub cloud_sync_aktif: bool,
+    pub margin_atas: Option<i32>,
+    pub margin_bawah: Option<i32>,
+    pub cetak_logo: Option<bool>,
+    pub logo_icon: Option<String>,
+    pub logo_url: Option<String>,
+    pub cetak_barcode: Option<bool>,
+    pub cetak_telepon: Option<bool>,
+    pub cetak_kasir: Option<bool>,
+    pub ukuran_font: Option<String>,
+    pub auto_cut: Option<bool>,
+}
+
+impl Default for SettingsDTO {
+    fn default() -> Self {
+        Self {
+            toko_nama: "MUEEZA STORE".to_string(),
+            toko_alamat: "Jl. Pemuda No. 108, Muaro, Sijunjung, Sumatera Barat".to_string(),
+            toko_telepon: "0812-6789-0123".to_string(),
+            header_nota: "SELAMAT DATANG DI MUEEZA STORE\nBelanja Hemat, Lengkap & Terpercaya".to_string(),
+            footer_nota: "TERIMA KASIH ATAS KUNJUNGAN ANDA\nBarang yang sudah dibeli tidak dapat ditukar/dikembalikan".to_string(),
+            printer_nama: "POS-80C Thermal Printer".to_string(),
+            printer_port: "USB001".to_string(),
+            kertas_lebar: "80mm".to_string(),
+            auto_kick_drawer: true,
+            ppn_aktif: true,
+            ppn_persen: 11.0,
+            wa_notif_nomor: "0812-3456-7890".to_string(),
+            wa_notif_jam: "21:00".to_string(),
+            cloud_sync_aktif: true,
+            margin_atas: Some(1),
+            margin_bawah: Some(3),
+            cetak_logo: Some(true),
+            logo_icon: Some("storefront".to_string()),
+            logo_url: None,
+            cetak_barcode: Some(true),
+            cetak_telepon: Some(true),
+            cetak_kasir: Some(true),
+            ukuran_font: Some("normal".to_string()),
+            auto_cut: Some(true),
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct BackupItemDTO {
+    pub nama_file: String,
+    pub path: String,
+    pub ukuran_bytes: u64,
+    pub ukuran_formatted: String,
+    pub waktu: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct BackupResultDTO {
+    pub sukses: bool,
+    pub pesan: String,
+    pub file: Option<BackupItemDTO>,
+    pub total_rotasi_dihapus: usize,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct NetworkConfigDTO {
+    pub cabang_id: String,
+    pub cabang_nama: String,
+    pub cabang_kode: String,
+    pub is_pusat: bool,
+    pub device_id: String,
+    pub device_kode: String,
+    pub device_nama: String,
+    pub device_role: String,
+    pub machine_id: String,
+    pub ip_address: String,
+    pub server_ip: String,
+    pub lan_port: u16,
+    pub cloud_url: String,
+    pub cloud_sync_enabled: bool,
+    pub daftar_cabang: Vec<Cabang>,
+    pub daftar_device: Vec<Device>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -199,7 +312,7 @@ fn build_cart_summary(svc: &KasirService) -> CartSummaryDTO {
 }
 
 #[tauri::command]
-fn get_status_info(_state: State<AppState>) -> Result<StatusInfoDTO, String> {
+fn get_status_info(state: State<AppState>) -> Result<StatusInfoDTO, String> {
     let cur_machine_id = MachineId::dapatkan();
     let lic_status = LicenseVerifier::baca_dari_file(LicenseVerifier::path_lisensi_default(), &cur_machine_id);
     let license_status = match lic_status {
@@ -209,9 +322,40 @@ fn get_status_info(_state: State<AppState>) -> Result<StatusInfoDTO, String> {
 
     let clock = Local::now().format("%H:%M:%S WIB").to_string();
 
+    let cur_op = state.current_operator.lock().map_err(|e| e.to_string())?;
+    let operator_nama = match &*cur_op {
+        Some(op) => format!("{} ({})", op.nama, op.kode),
+        None => "Belum Login".to_string(),
+    };
+
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let opt_saved: Option<String> = db
+        .conn()
+        .query_row(
+            "SELECT value FROM app_settings WHERE key = 'general_settings' LIMIT 1;",
+            [],
+            |r| r.get(0),
+        )
+        .optional()
+        .unwrap_or(None);
+
+    let toko_nama = if let Some(val) = opt_saved {
+        if let Ok(st) = serde_json::from_str::<SettingsDTO>(&val) {
+            if !st.toko_nama.trim().is_empty() {
+                st.toko_nama
+            } else {
+                "MUEEZA STORE".to_string()
+            }
+        } else {
+            "MUEEZA STORE".to_string()
+        }
+    } else {
+        "MUEEZA STORE".to_string()
+    };
+
     Ok(StatusInfoDTO {
-        toko_nama: "MUEEZA STORE".to_string(),
-        operator_nama: "Alexander P.".to_string(),
+        toko_nama,
+        operator_nama,
         shift_status: "Shift 1".to_string(),
         terminal_id: "Terminal: #REG-01".to_string(),
         clock,
@@ -220,6 +364,414 @@ fn get_status_info(_state: State<AppState>) -> Result<StatusInfoDTO, String> {
         machine_id: cur_machine_id,
         license_status,
     })
+}
+
+#[tauri::command]
+fn login(state: State<AppState>, kode: String, password: String) -> Result<OperatorDTO, String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let repo = OperatorRepo::new(db.conn());
+    let opt_op = repo.verifikasi(&state.cabang_id, &kode, &password).map_err(|e| e.to_string())?;
+
+    match opt_op {
+        Some(op) => {
+            let is_admin = op.kode == "admin" || op.role == "admin" || op.role.starts_with("admin");
+            let dto = OperatorDTO {
+                id: op.id,
+                cabang_id: op.cabang_id,
+                kode: op.kode,
+                nama: op.nama,
+                role: op.role,
+                is_admin,
+                is_aktif: op.is_aktif,
+            };
+            let mut cur = state.current_operator.lock().map_err(|e| e.to_string())?;
+            *cur = Some(dto.clone());
+            Ok(dto)
+        }
+        None => Err("Kode/Username atau password salah".to_string()),
+    }
+}
+
+#[tauri::command]
+fn logout(state: State<AppState>) -> Result<(), String> {
+    let mut cur = state.current_operator.lock().map_err(|e| e.to_string())?;
+    *cur = None;
+    Ok(())
+}
+
+#[tauri::command]
+fn get_operators(state: State<AppState>) -> Result<Vec<OperatorDTO>, String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let repo = OperatorRepo::new(db.conn());
+    let list = repo.semua_operator(&state.cabang_id).map_err(|e| e.to_string())?;
+    let mut dtos: Vec<OperatorDTO> = list
+        .into_iter()
+        .map(|op| {
+            let is_admin = op.kode == "admin" || op.role == "admin" || op.role.starts_with("admin");
+            OperatorDTO {
+                id: op.id,
+                cabang_id: op.cabang_id,
+                kode: op.kode,
+                nama: op.nama,
+                role: op.role,
+                is_admin,
+                is_aktif: op.is_aktif,
+            }
+        })
+        .collect();
+
+    // Urutkan admin di urutan pertama, sisanya alfabetis
+    dtos.sort_by(|a, b| {
+        if a.is_admin && !b.is_admin {
+            std::cmp::Ordering::Less
+        } else if !a.is_admin && b.is_admin {
+            std::cmp::Ordering::Greater
+        } else {
+            a.kode.cmp(&b.kode)
+        }
+    });
+
+    Ok(dtos)
+}
+
+#[tauri::command]
+fn simpan_operator(
+    state: State<AppState>,
+    id: Option<String>,
+    kode: String,
+    nama: String,
+    role: String,
+    password: Option<String>,
+    is_aktif: Option<bool>,
+) -> Result<OperatorDTO, String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let repo = OperatorRepo::new(db.conn());
+
+    let kode_clean = kode.trim();
+    if kode_clean.is_empty() {
+        return Err("Kode/Username operator tidak boleh kosong".to_string());
+    }
+    let nama_clean = nama.trim();
+    if nama_clean.is_empty() {
+        return Err("Nama lengkap operator tidak boleh kosong".to_string());
+    }
+
+    let is_aktif_val = is_aktif.unwrap_or(true);
+    let is_admin_role = kode_clean == "admin" || role == "admin" || role.starts_with("admin");
+
+    let final_op = if let Some(existing_id) = id.filter(|s| !s.trim().is_empty()) {
+        let existing = repo
+            .cari_by_id(&existing_id)
+            .map_err(|e| e.to_string())?
+            .ok_or_else(|| "Operator tidak ditemukan".to_string())?;
+
+        let password_hash = if let Some(pw) = password.filter(|p| !p.trim().is_empty()) {
+            OperatorRepo::hash_password(&pw)
+        } else {
+            existing.password_hash.clone()
+        };
+
+        let (final_kode, final_role, final_aktif) = if existing.kode == "admin" {
+            ("admin".to_string(), "admin".to_string(), true)
+        } else {
+            (kode_clean.to_string(), role.trim().to_string(), is_aktif_val)
+        };
+
+        DOperator {
+            id: existing.id,
+            cabang_id: state.cabang_id.clone(),
+            kode: final_kode,
+            nama: nama_clean.to_string(),
+            password_hash,
+            role: final_role,
+            is_aktif: final_aktif,
+            created_at: existing.created_at,
+            updated_at: Some(chrono::Utc::now()),
+        }
+    } else {
+        if kode_clean.to_lowercase() == "admin" {
+            return Err("User admin sudah ada secara default".to_string());
+        }
+        let pw_raw = password
+            .filter(|p| !p.trim().is_empty())
+            .unwrap_or_else(|| "123456".to_string());
+        let password_hash = OperatorRepo::hash_password(&pw_raw);
+
+        DOperator {
+            id: uuid::Uuid::new_v4().to_string(),
+            cabang_id: state.cabang_id.clone(),
+            kode: kode_clean.to_string(),
+            nama: nama_clean.to_string(),
+            password_hash,
+            role: role.trim().to_string(),
+            is_aktif: is_aktif_val,
+            created_at: Some(chrono::Utc::now()),
+            updated_at: Some(chrono::Utc::now()),
+        }
+    };
+
+    repo.simpan(&final_op).map_err(|e| e.to_string())?;
+
+    Ok(OperatorDTO {
+        id: final_op.id,
+        cabang_id: final_op.cabang_id,
+        kode: final_op.kode,
+        nama: final_op.nama,
+        role: final_op.role,
+        is_admin: is_admin_role,
+        is_aktif: final_op.is_aktif,
+    })
+}
+
+#[tauri::command]
+fn hapus_operator(state: State<AppState>, id: String) -> Result<(), String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let repo = OperatorRepo::new(db.conn());
+    repo.hapus(&id).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn get_current_user(state: State<AppState>) -> Result<Option<OperatorDTO>, String> {
+    let cur = state.current_operator.lock().map_err(|e| e.to_string())?;
+    Ok(cur.clone())
+}
+
+#[tauri::command]
+fn ubah_password(
+    state: State<AppState>,
+    kode: String,
+    lama: String,
+    baru: String,
+) -> Result<(), String> {
+    if baru.trim().is_empty() {
+        return Err("Password baru tidak boleh kosong".to_string());
+    }
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let repo = OperatorRepo::new(db.conn());
+
+    let opt_op = repo.verifikasi(&state.cabang_id, &kode, &lama).map_err(|e| e.to_string())?;
+    if opt_op.is_none() {
+        return Err("Password lama tidak sesuai".to_string());
+    }
+
+    repo.ubah_password(&state.cabang_id, &kode, &baru).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn get_settings(state: State<AppState>) -> Result<SettingsDTO, String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let opt_val: Option<String> = db
+        .conn()
+        .query_row(
+            "SELECT value FROM app_settings WHERE key = 'general_settings' LIMIT 1;",
+            [],
+            |r| r.get(0),
+        )
+        .optional()
+        .map_err(|e| e.to_string())?;
+
+    if let Some(val) = opt_val {
+        if let Ok(st) = serde_json::from_str::<SettingsDTO>(&val) {
+            return Ok(st);
+        }
+    }
+    Ok(SettingsDTO::default())
+}
+
+#[tauri::command]
+fn save_settings(state: State<AppState>, settings: SettingsDTO) -> Result<(), String> {
+    let json_val = serde_json::to_string(&settings).map_err(|e| e.to_string())?;
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+
+    db.conn()
+        .execute(
+            r#"
+            INSERT INTO app_settings (key, value) VALUES ('general_settings', ?1)
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value;
+            "#,
+            rusqlite::params![json_val],
+        )
+        .map_err(|e| e.to_string())?;
+
+    // Sinkronisasi nama toko ke daplikasi jika ada
+    let _ = db.conn().execute(
+        r#"
+        UPDATE daplikasi
+        SET nama_toko = ?1,
+            alamat = ?2,
+            telepon = ?3,
+            header_struk = ?4,
+            footer_struk = ?5,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE cabang_id = ?6;
+        "#,
+        rusqlite::params![
+            settings.toko_nama,
+            settings.toko_alamat,
+            settings.toko_telepon,
+            settings.header_nota,
+            settings.footer_nota,
+            state.cabang_id,
+        ],
+    );
+
+    Ok(())
+}
+
+fn format_file_size(bytes: u64) -> String {
+    if bytes < 1024 {
+        format!("{} B", bytes)
+    } else if bytes < 1024 * 1024 {
+        format!("{:.1} KB", bytes as f64 / 1024.0)
+    } else {
+        format!("{:.2} MB", bytes as f64 / (1024.0 * 1024.0))
+    }
+}
+
+#[tauri::command]
+fn backup_database(state: State<AppState>) -> Result<BackupResultDTO, String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let backup_dir = Path::new("backups");
+    let path = BackupManager::buat_backup(&db, backup_dir)?;
+    let total_dihapus = BackupManager::rotasi_backup(backup_dir, 10).unwrap_or(0);
+
+    let meta = std::fs::metadata(&path).map_err(|e| e.to_string())?;
+    let size = meta.len();
+    let nama_file = path.file_name().unwrap_or_default().to_string_lossy().to_string();
+    let now_str = Local::now().format("%d/%m/%Y %H:%M:%S").to_string();
+
+    Ok(BackupResultDTO {
+        sukses: true,
+        pesan: format!("Backup berhasil dibuat: {}", nama_file),
+        file: Some(BackupItemDTO {
+            nama_file,
+            path: path.to_string_lossy().to_string(),
+            ukuran_bytes: size,
+            ukuran_formatted: format_file_size(size),
+            waktu: now_str,
+        }),
+        total_rotasi_dihapus: total_dihapus,
+    })
+}
+
+#[tauri::command]
+fn cek_integritas_database(state: State<AppState>) -> Result<bool, String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    BackupManager::cek_integritas(&db)
+}
+
+#[tauri::command]
+fn get_backup_list() -> Result<Vec<BackupItemDTO>, String> {
+    let backup_dir = Path::new("backups");
+    if !backup_dir.exists() {
+        let _ = std::fs::create_dir_all(backup_dir);
+        return Ok(Vec::new());
+    }
+
+    let mut list = Vec::new();
+    let entries = std::fs::read_dir(backup_dir).map_err(|e| e.to_string())?;
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_file() && path.extension().is_some_and(|ext| ext == "db") {
+            if let Ok(meta) = entry.metadata() {
+                let size = meta.len();
+                let nama_file = path.file_name().unwrap_or_default().to_string_lossy().to_string();
+                let modified = meta
+                    .modified()
+                    .ok()
+                    .map(|t| {
+                        chrono::DateTime::<Local>::from(t).format("%d/%m/%Y %H:%M").to_string()
+                    })
+                    .unwrap_or_else(|| "Baru saja".to_string());
+
+                list.push((
+                    meta.modified().ok(),
+                    BackupItemDTO {
+                        nama_file,
+                        path: path.to_string_lossy().to_string(),
+                        ukuran_bytes: size,
+                        ukuran_formatted: format_file_size(size),
+                        waktu: modified,
+                    },
+                ));
+            }
+        }
+    }
+
+    list.sort_by(|a, b| b.0.cmp(&a.0));
+    Ok(list.into_iter().map(|item| item.1).collect())
+}
+
+#[tauri::command]
+fn get_network_config(state: State<AppState>) -> Result<NetworkConfigDTO, String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let repo = CabangRepo::new(db.conn());
+
+    let cabang_list = repo.semua_cabang().unwrap_or_default();
+    let device_list = repo.semua_device(&state.cabang_id).unwrap_or_default();
+
+    let cur_cabang = cabang_list.iter().find(|c| c.id == state.cabang_id).cloned();
+    let cur_device = device_list.iter().find(|d| d.id == state.device_id).cloned();
+
+    let machine_id = MachineId::dapatkan();
+
+    Ok(NetworkConfigDTO {
+        cabang_id: state.cabang_id.clone(),
+        cabang_nama: cur_cabang.as_ref().map(|c| c.nama.clone()).unwrap_or_else(|| "Toko Pusat".to_string()),
+        cabang_kode: cur_cabang.as_ref().map(|c| c.kode.clone()).unwrap_or_else(|| "CAB01".to_string()),
+        is_pusat: cur_cabang.as_ref().map(|c| c.is_pusat).unwrap_or(true),
+        device_id: state.device_id.clone(),
+        device_kode: cur_device.as_ref().map(|d| d.kode.clone()).unwrap_or_else(|| "DEV01".to_string()),
+        device_nama: cur_device.as_ref().map(|d| d.nama.clone()).unwrap_or_else(|| "Kasir 1".to_string()),
+        device_role: cur_device.as_ref().map(|d| d.role.clone()).unwrap_or_else(|| "server".to_string()),
+        machine_id,
+        ip_address: "127.0.0.1".to_string(),
+        server_ip: "192.168.1.100".to_string(),
+        lan_port: 8080,
+        cloud_url: "https://api.fazpos.cloud/v1/sync".to_string(),
+        cloud_sync_enabled: true,
+        daftar_cabang: cabang_list,
+        daftar_device: device_list,
+    })
+}
+
+#[tauri::command]
+fn simpan_cabang_baru(
+    state: State<AppState>,
+    kode: String,
+    nama: String,
+    alamat: Option<String>,
+    telepon: Option<String>,
+    is_pusat: bool,
+) -> Result<Cabang, String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let repo = CabangRepo::new(db.conn());
+
+    let mut c = Cabang::baru(kode.trim(), nama.trim(), is_pusat);
+    c.alamat = alamat;
+    c.telepon = telepon;
+    repo.simpan_cabang(&c).map_err(|e| e.to_string())?;
+    Ok(c)
+}
+
+#[tauri::command]
+fn simpan_device_baru(
+    state: State<AppState>,
+    kode: String,
+    nama: String,
+    role: String,
+    ip_address: Option<String>,
+) -> Result<Device, String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let repo = CabangRepo::new(db.conn());
+
+    let mut d = Device::baru(&state.cabang_id, kode.trim(), nama.trim(), role.trim(), "MACHINE-NODE");
+    d.ip_address = ip_address;
+    repo.simpan_device(&d).map_err(|e| e.to_string())?;
+    Ok(d)
 }
 
 #[tauri::command]
@@ -989,6 +1541,14 @@ fn inisialisasi_data_dasar(db: &Database) -> Result<(String, String), Box<dyn st
         barang_repo.simpan(&b)?;
     }
 
+    // Inisialisasi User Admin Permanen jika belum ada
+    let operator_repo = OperatorRepo::new(db.conn());
+    if operator_repo.cari_by_kode(&cabang.id, "admin")?.is_none() {
+        let password_hash = OperatorRepo::hash_password("admin");
+        let admin_op = DOperator::baru(&cabang.id, "admin", "Administrator", password_hash, "admin");
+        operator_repo.simpan(&admin_op)?;
+    }
+
     Ok((cabang.id, device.id))
 }
 
@@ -1017,6 +1577,7 @@ fn main() {
         cabang_id,
         device_id,
         shift_id: shift_aktif.id,
+        current_operator: Mutex::new(None),
     };
 
     tauri::Builder::default()
@@ -1045,6 +1606,21 @@ fn main() {
             get_transactions,
             get_transaction_stats,
             get_product_stats,
+            login,
+            logout,
+            get_operators,
+            simpan_operator,
+            hapus_operator,
+            get_current_user,
+            ubah_password,
+            get_settings,
+            save_settings,
+            backup_database,
+            cek_integritas_database,
+            get_backup_list,
+            get_network_config,
+            simpan_cabang_baru,
+            simpan_device_baru,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

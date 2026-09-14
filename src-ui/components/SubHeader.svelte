@@ -2,18 +2,26 @@
   let {
     tokoNama = "MUEEZA STORE",
     pelanggan = "",
+    logoUrl = "",
+    logoIcon = "storefront",
   }: {
     tokoNama?: string;
     faktur?: string;
     pelanggan?: string;
+    logoUrl?: string;
+    logoIcon?: string;
   } = $props();
 </script>
 
 <div class="bg-slate-100 border-b border-slate-300 px-5 py-3 flex items-center justify-between shadow-xs shrink-0 select-none">
   <div class="flex items-center gap-3">
     <div class="flex items-center gap-3.5">
-      <div class="w-11 h-11 rounded-xl bg-primary text-white flex items-center justify-center shadow-xs shrink-0">
-        <span class="material-symbols-outlined text-[28px]">storefront</span>
+      <div class="w-11 h-11 rounded-xl {logoUrl ? 'bg-white border border-slate-300 p-1' : 'bg-primary text-white'} flex items-center justify-center shadow-xs shrink-0 overflow-hidden">
+        {#if logoUrl}
+          <img src={logoUrl} alt={tokoNama} class="w-full h-full object-contain" />
+        {:else}
+          <span class="material-symbols-outlined text-[28px]">{logoIcon || "storefront"}</span>
+        {/if}
       </div>
       <div class="flex items-baseline gap-3">
         <div class="text-3xl font-black text-slate-900 uppercase tracking-tight leading-none">

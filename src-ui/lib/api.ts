@@ -125,9 +125,361 @@ export interface TransactionSummaryStatsDTO {
   edc_pct: number;
 }
 
+export interface PurchaseHistoryItemDTO {
+  id: string;
+  no: number;
+  faktur: string;
+  faktur_supplier: string;
+  tanggal: string;
+  suplier: string;
+  total_item: number;
+  total_qty: number;
+  total_beli: number;
+  metode: string;
+  jatuh_tempo: string;
+  status: string;
+  penerima: string;
+}
+
+export interface PurchaseStatsDTO {
+  total_belanja_bulan_ini: number;
+  total_qty_masuk: number;
+  total_faktur: number;
+  total_hutang_tempo: number;
+  supplier_teraktif: string;
+}
+
+export interface MemberDTO {
+  id: string;
+  kode: string;
+  nama: string;
+  telepon: string;
+  alamat: string;
+  tier: "VIP" | "GOLD" | "SILVER" | "REGULAR";
+  poin: number;
+  total_belanja: number;
+  kunjungan_terakhir: string;
+  is_aktif: boolean;
+}
+
+export interface MemberStatsDTO {
+  total_member: number;
+  member_aktif: number;
+  total_poin: number;
+  vip_gold_count: number;
+  member_baru_minggu_ini: number;
+}
+
+export interface SupplierDTO {
+  id: string;
+  kode: string;
+  nama: string;
+  pic: string;
+  telepon: string;
+  alamat: string;
+  rekening: string;
+  termin_hari: number;
+  total_transaksi: number;
+  saldo_hutang: number;
+  is_aktif: boolean;
+}
+
+export interface SupplierStatsDTO {
+  total_supplier: number;
+  total_belanja: number;
+  total_hutang: number;
+  jatuh_tempo_segera: number;
+  avg_termin: number;
+}
+
+export interface DebtItemDTO {
+  id: string;
+  jenis: "HUTANG" | "PIUTANG";
+  faktur_ref: string;
+  tanggal: string;
+  pihak: string;
+  kontak: string;
+  jatuh_tempo: string;
+  tagihan_awal: number;
+  telah_dibayar: number;
+  sisa: number;
+  status: "LUNAS" | "TEMPO" | "LEWAT_TEMPO";
+}
+
+export interface DebtStatsDTO {
+  total_hutang: number;
+  total_piutang: number;
+  jatuh_tempo_minggu_ini: number;
+  terbayar_bulan_ini: number;
+  rasio_lancar: number;
+}
+
+export interface ReportSummaryDTO {
+  omset_kotor: number;
+  total_hpp: number;
+  laba_kotor: number;
+  biaya_operasional: number;
+  laba_bersih: number;
+  margin_persen: number;
+}
+
+export interface SettingsDTO {
+  toko_nama: string;
+  toko_alamat: string;
+  toko_telepon: string;
+  header_nota: string;
+  footer_nota: string;
+  printer_nama: string;
+  printer_port: string;
+  kertas_lebar: "58mm" | "80mm";
+  auto_kick_drawer: boolean;
+  ppn_aktif: boolean;
+  ppn_persen: number;
+  wa_notif_nomor: string;
+  wa_notif_jam: string;
+  cloud_sync_aktif: boolean;
+  margin_atas?: number;
+  margin_bawah?: number;
+  cetak_logo?: boolean;
+  logo_icon?: string;
+  logo_url?: string;
+  cetak_barcode?: boolean;
+  cetak_telepon?: boolean;
+  cetak_kasir?: boolean;
+  ukuran_font?: "normal" | "compact";
+  auto_cut?: boolean;
+}
+
+export interface OperatorDTO {
+  id: string;
+  cabang_id: string;
+  kode: string;
+  nama: string;
+  role: string;
+  is_admin: boolean;
+  is_aktif?: boolean;
+}
+
+export interface BackupItemDTO {
+  nama_file: string;
+  path: string;
+  ukuran_bytes: number;
+  ukuran_formatted: string;
+  waktu: string;
+}
+
+export interface BackupResultDTO {
+  sukses: boolean;
+  pesan: string;
+  file?: BackupItemDTO;
+  total_rotasi_dihapus: number;
+}
+
+export interface CabangDTO {
+  id: string;
+  kode: string;
+  nama: string;
+  alamat?: string;
+  telepon?: string;
+  is_pusat: boolean;
+  sync_status: string;
+}
+
+export interface DeviceDTO {
+  id: string;
+  cabang_id: string;
+  kode: string;
+  nama: string;
+  role: string; // "server" | "client"
+  machine_id: string;
+  ip_address?: string;
+  is_active: boolean;
+}
+
+export interface NetworkConfigDTO {
+  cabang_id: string;
+  cabang_nama: string;
+  cabang_kode: string;
+  is_pusat: boolean;
+  device_id: string;
+  device_kode: string;
+  device_nama: string;
+  device_role: string;
+  machine_id: string;
+  ip_address: string;
+  server_ip: string;
+  lan_port: number;
+  cloud_url: string;
+  cloud_sync_enabled: boolean;
+  daftar_cabang: CabangDTO[];
+  daftar_device: DeviceDTO[];
+}
+
+export type ModulePermissionKey =
+  | "kasir"
+  | "produk"
+  | "penjualan"
+  | "pembelian"
+  | "member"
+  | "supplier"
+  | "hutang_piutang"
+  | "laporan"
+  | "pengaturan";
+
+export interface ModulePermissionDef {
+  key: ModulePermissionKey;
+  label: string;
+  icon: string;
+  desc: string;
+}
+
+export const ALL_MODULE_PERMISSIONS: ModulePermissionDef[] = [
+  { key: "kasir", label: "Kasir (POS)", icon: "point_of_sale", desc: "Layar transaksi kasir & scan barcode [F1]" },
+  { key: "produk", label: "Menu Produk & Stok", icon: "inventory_2", desc: "Katalog produk, edit harga & stok barang [F2]" },
+  { key: "penjualan", label: "Riwayat Penjualan", icon: "receipt_long", desc: "Daftar nota penjualan & cetak ulang struk [F3]" },
+  { key: "pembelian", label: "Riwayat Pembelian", icon: "local_shipping", desc: "Faktur pembelian & pengadaan barang masuk" },
+  { key: "member", label: "Master Member", icon: "loyalty", desc: "Data pelanggan, tier member & reward poin" },
+  { key: "supplier", label: "Master Supplier", icon: "factory", desc: "Daftar rekanan vendor & jadwal pasokan" },
+  { key: "hutang_piutang", label: "Hutang & Piutang", icon: "account_balance_wallet", desc: "Buku jatuh tempo hutang dagang & piutang" },
+  { key: "laporan", label: "Laporan Bisnis", icon: "monitoring", desc: "Laporan omset, laba rugi & produk terlaris" },
+  { key: "pengaturan", label: "Pengaturan Sistem", icon: "settings", desc: "Profil toko, hardware ESC/POS & manajemen operator" },
+];
+
+export function getOperatorPermissions(op: OperatorDTO | null | undefined): ModulePermissionKey[] {
+  if (!op) return [];
+  if (op.is_admin || op.role === "admin" || op.role.startsWith("admin")) {
+    return ALL_MODULE_PERMISSIONS.map((m) => m.key);
+  }
+
+  if (op.role.includes(":")) {
+    const parts = op.role.split(":");
+    return parts[1].split(",").map((p) => p.trim() as ModulePermissionKey).filter(Boolean);
+  }
+
+  const baseRole = op.role.toLowerCase();
+  if (baseRole === "supervisor") {
+    return ["kasir", "produk", "penjualan", "pembelian", "member", "supplier", "hutang_piutang", "laporan"];
+  } else if (baseRole === "gudang") {
+    return ["produk", "pembelian", "supplier"];
+  } else {
+    return ["kasir", "penjualan", "member"];
+  }
+}
+
+export function canOperatorAccess(op: OperatorDTO | null | undefined, view: string): boolean {
+  if (!op) return false;
+  if (op.is_admin || op.role === "admin" || op.role.startsWith("admin")) return true;
+  const perms = getOperatorPermissions(op);
+  return perms.includes(view as ModulePermissionKey);
+}
+
 /* ── API Calls ── */
 
 export const api = {
+  login: (kode: string, password: string) =>
+    invoke<OperatorDTO>("login", { kode, password }),
+  logout: () => invoke<void>("logout"),
+  getOperators: () =>
+    invoke<OperatorDTO[]>("get_operators").catch(() => [
+      {
+        id: "op-admin",
+        cabang_id: "CABANG-01",
+        kode: "admin",
+        nama: "Administrator",
+        role: "admin",
+        is_admin: true,
+        is_aktif: true,
+      },
+    ]),
+  simpanOperator: (op: {
+    id?: string;
+    kode: string;
+    nama: string;
+    role: string;
+    password?: string;
+    is_aktif: boolean;
+  }) =>
+    invoke<OperatorDTO>("simpan_operator", {
+      id: op.id,
+      kode: op.kode,
+      nama: op.nama,
+      role: op.role,
+      password: op.password,
+      isAktif: op.is_aktif,
+      is_aktif: op.is_aktif,
+    }),
+  hapusOperator: (id: string) => invoke<void>("hapus_operator", { id }),
+  getCurrentUser: () => invoke<OperatorDTO | null>("get_current_user"),
+  ubahPassword: (kode: string, lama: string, baru: string) =>
+    invoke<void>("ubah_password", { kode, lama, baru }),
+  getSettings: async () => {
+    try {
+      const res = await invoke<SettingsDTO>("get_settings");
+      if (res && res.toko_nama) {
+        localStorage.setItem("fazpos_settings", JSON.stringify(res));
+        return res;
+      }
+    } catch (e) {
+      console.warn("api.getSettings fallback to localStorage:", e);
+    }
+    const cached = localStorage.getItem("fazpos_settings");
+    if (cached) {
+      try {
+        return JSON.parse(cached) as SettingsDTO;
+      } catch {}
+    }
+    return {
+      toko_nama: "MUEEZA STORE",
+      toko_alamat: "Jl. Pemuda No. 108, Muaro, Sijunjung, Sumatera Barat",
+      toko_telepon: "0812-6789-0123",
+      header_nota: "SELAMAT DATANG DI MUEEZA STORE\nBelanja Hemat, Lengkap & Terpercaya",
+      footer_nota: "TERIMA KASIH ATAS KUNJUNGAN ANDA\nBarang yang sudah dibeli tidak dapat ditukar/dikembalikan",
+      printer_nama: "POS-80C Thermal Printer",
+      printer_port: "USB001",
+      kertas_lebar: "80mm",
+      auto_kick_drawer: true,
+      ppn_aktif: true,
+      ppn_persen: 11,
+      wa_notif_nomor: "0812-3456-7890",
+      wa_notif_jam: "21:00",
+      cloud_sync_aktif: true,
+      margin_atas: 1,
+      margin_bawah: 3,
+      cetak_logo: true,
+      logo_icon: "storefront",
+      logo_url: "",
+      cetak_barcode: true,
+      cetak_telepon: true,
+      cetak_kasir: true,
+      ukuran_font: "normal",
+      auto_cut: true,
+    } as SettingsDTO;
+  },
+  saveSettings: async (settings: SettingsDTO) => {
+    localStorage.setItem("fazpos_settings", JSON.stringify(settings));
+    return invoke<void>("save_settings", { settings });
+  },
+  backupDatabase: () => invoke<BackupResultDTO>("backup_database"),
+  cekIntegritasDatabase: () => invoke<boolean>("cek_integritas_database"),
+  getBackupList: () => invoke<BackupItemDTO[]>("get_backup_list"),
+  getNetworkConfig: () => invoke<NetworkConfigDTO>("get_network_config"),
+  simpanCabangBaru: (kode: string, nama: string, alamat?: string, telepon?: string, is_pusat?: boolean) =>
+    invoke<CabangDTO>("simpan_cabang_baru", {
+      kode,
+      nama,
+      alamat,
+      telepon,
+      isPusat: is_pusat ?? false,
+      is_pusat: is_pusat ?? false,
+    }),
+  simpanDeviceBaru: (kode: string, nama: string, role: string, ip_address?: string) =>
+    invoke<DeviceDTO>("simpan_device_baru", {
+      kode,
+      nama,
+      role,
+      ipAddress: ip_address,
+      ip_address,
+    }),
   getStatusInfo: () => invoke<StatusInfoDTO>("get_status_info"),
   getCatalogProducts: (keyword?: string) =>
     invoke<ProductDTO[]>("get_catalog_products", { keyword }),
