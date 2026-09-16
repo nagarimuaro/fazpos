@@ -1,7 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::path::Path;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use chrono::Local;
 use rusqlite::OptionalExtension;
 use serde::{Deserialize, Serialize};
@@ -12,6 +12,8 @@ use fazpos::db::Database;
 use fazpos::domain::barang::DBarang;
 use fazpos::domain::cabang::{Cabang, Device};
 use fazpos::domain::operator::DOperator;
+use fazpos::lan::discovery::{self, DiscoveredDevice, DiscoveryPacket};
+use fazpos::lan::server::{buat_lan_router, LanServerState};
 use fazpos::license::machine_id::MachineId;
 use fazpos::license::verification::{LicenseStatus, LicenseVerifier};
 use fazpos::repository::barang_repo::BarangRepo;
@@ -21,14 +23,16 @@ use fazpos::repository::pelanggan_repo::PelangganRepo;
 use fazpos::repository::pending_repo::PendingRepo;
 use fazpos::services::kasir_service::KasirService;
 use fazpos::services::shift_service::ShiftService;
+use fazpos::sync::supabase::SupabaseClient;
 
 pub struct AppState {
-    pub db: Mutex<Database>,
+    pub db: Arc<Mutex<Database>>,
     pub kasir: Mutex<KasirService>,
     pub cabang_id: String,
     pub device_id: String,
     pub shift_id: String,
     pub current_operator: Mutex<Option<OperatorDTO>>,
+    pub discovered_devices: Arc<Mutex<Vec<DiscoveredDevice>>>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -136,6 +140,70 @@ pub struct NetworkConfigDTO {
     pub cloud_sync_enabled: bool,
     pub daftar_cabang: Vec<Cabang>,
     pub daftar_device: Vec<Device>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct DiscoveredDeviceDTO {
+    pub device_id: String,
+    pub device_nama: String,
+    pub cabang_id: String,
+    pub cabang_nama: String,
+    pub role: String,
+    pub ip_address: String,
+    pub port: u16,
+    pub machine_id: String,
+    pub license_status: String,
+    pub versi: String,
+    pub is_online: bool,
+    pub last_seen: String,
+    pub latency_ms: Option<u64>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct LanPingResultDTO {
+    pub sukses: bool,
+    pub pesan: String,
+    pub latency_ms: u64,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct SupabaseConfigDTO {
+    pub url: String,
+    pub api_key: String,
+    pub is_bound: bool,
+    pub auto_sync: bool,
+    pub interval_menit: u32,
+    pub pending_count: u64,
+    pub last_sync_waktu: Option<String>,
+    pub last_sync_status: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct SupabaseTestResultDTO {
+    pub sukses: bool,
+    pub pesan: String,
+    pub latency_ms: u64,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct SupabaseSyncResultDTO {
+    pub sukses: bool,
+    pub total_dikirim: usize,
+    pub total_berhasil: usize,
+    pub total_gagal: usize,
+    pub durasi_ms: u64,
+    pub pesan: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct SyncLogDTO {
+    pub id: String,
+    pub waktu: String,
+    pub tabel: String,
+    pub jumlah_record: i64,
+    pub status: String,
+    pub pesan: Option<String>,
+    pub durasi_ms: Option<i64>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -366,8 +434,21 @@ fn get_status_info(state: State<AppState>) -> Result<StatusInfoDTO, String> {
     })
 }
 
+fn pastikan_lisensi_aktif() -> Result<(), String> {
+    let cur_machine_id = MachineId::dapatkan();
+    let lic_status = LicenseVerifier::baca_dari_file(
+        LicenseVerifier::path_lisensi_default(),
+        &cur_machine_id,
+    );
+    match lic_status {
+        LicenseStatus::Aktif(_) => Ok(()),
+        _ => Err("Aplikasi belum diaktivasi! Silakan aktivasi lisensi perangkat ini terlebih dahulu.".to_string()),
+    }
+}
+
 #[tauri::command]
 fn login(state: State<AppState>, kode: String, password: String) -> Result<OperatorDTO, String> {
+    pastikan_lisensi_aktif()?;
     let db = state.db.lock().map_err(|e| e.to_string())?;
     let repo = OperatorRepo::new(db.conn());
     let opt_op = repo.verifikasi(&state.cabang_id, &kode, &password).map_err(|e| e.to_string())?;
@@ -581,7 +662,30 @@ fn get_settings(state: State<AppState>) -> Result<SettingsDTO, String> {
 }
 
 #[tauri::command]
+fn aktivasi_lisensi(state: State<AppState>, token: String) -> Result<StatusInfoDTO, String> {
+    let cur_machine_id = MachineId::dapatkan();
+    let token_clean = token.trim();
+    if token_clean.is_empty() {
+        return Err("Token serial lisensi tidak boleh kosong!".to_string());
+    }
+
+    // Verifikasi secara kriptografis di sisi Rust (binary terkompilasi)
+    let _payload = LicenseVerifier::verifikasi(token_clean, &cur_machine_id)?;
+
+    // Simpan ke file lisensi lokal dengan checksum anti-tamper
+    LicenseVerifier::simpan_ke_file(
+        LicenseVerifier::path_lisensi_default(),
+        token_clean,
+        &cur_machine_id,
+    )?;
+
+    // Kembalikan status info terbaru yang sudah aktif
+    get_status_info(state)
+}
+
+#[tauri::command]
 fn save_settings(state: State<AppState>, settings: SettingsDTO) -> Result<(), String> {
+    pastikan_lisensi_aktif()?;
     let json_val = serde_json::to_string(&settings).map_err(|e| e.to_string())?;
     let db = state.db.lock().map_err(|e| e.to_string())?;
 
@@ -718,6 +822,18 @@ fn get_network_config(state: State<AppState>) -> Result<NetworkConfigDTO, String
 
     let machine_id = MachineId::dapatkan();
 
+    let conn = db.conn();
+    let server_ip = conn
+        .query_row("SELECT value FROM app_settings WHERE key = 'lan_server_ip'", [], |r| r.get(0))
+        .unwrap_or_else(|_| "192.168.1.100".to_string());
+    let cloud_url = conn
+        .query_row("SELECT value FROM app_settings WHERE key = 'supabase_url'", [], |r| r.get(0))
+        .unwrap_or_default();
+    let cloud_sync_enabled = conn
+        .query_row("SELECT value FROM app_settings WHERE key = 'supabase_auto_sync'", [], |r| r.get::<_, String>(0))
+        .map(|v| v == "1" || v == "true")
+        .unwrap_or(true);
+
     Ok(NetworkConfigDTO {
         cabang_id: state.cabang_id.clone(),
         cabang_nama: cur_cabang.as_ref().map(|c| c.nama.clone()).unwrap_or_else(|| "Toko Pusat".to_string()),
@@ -729,10 +845,10 @@ fn get_network_config(state: State<AppState>) -> Result<NetworkConfigDTO, String
         device_role: cur_device.as_ref().map(|d| d.role.clone()).unwrap_or_else(|| "server".to_string()),
         machine_id,
         ip_address: "127.0.0.1".to_string(),
-        server_ip: "192.168.1.100".to_string(),
-        lan_port: 8080,
-        cloud_url: "https://api.fazpos.cloud/v1/sync".to_string(),
-        cloud_sync_enabled: true,
+        server_ip,
+        lan_port: 7890,
+        cloud_url,
+        cloud_sync_enabled,
         daftar_cabang: cabang_list,
         daftar_device: device_list,
     })
@@ -772,6 +888,189 @@ fn simpan_device_baru(
     d.ip_address = ip_address;
     repo.simpan_device(&d).map_err(|e| e.to_string())?;
     Ok(d)
+}
+
+#[tauri::command]
+fn get_discovered_devices(state: State<AppState>) -> Result<Vec<DiscoveredDeviceDTO>, String> {
+    let guard = state.discovered_devices.lock().map_err(|e| e.to_string())?;
+    let list = guard
+        .iter()
+        .map(|d| DiscoveredDeviceDTO {
+            device_id: d.packet.device_id.clone(),
+            device_nama: d.packet.device_nama.clone(),
+            cabang_id: d.packet.cabang_id.clone(),
+            cabang_nama: d.packet.cabang_nama.clone(),
+            role: d.packet.role.clone(),
+            ip_address: d.ip_address.clone(),
+            port: d.packet.port,
+            machine_id: d.packet.machine_id.clone(),
+            license_status: d.packet.license_status.clone(),
+            versi: d.packet.versi.clone(),
+            is_online: d.is_online,
+            last_seen: d.last_seen.clone(),
+            latency_ms: d.latency_ms,
+        })
+        .collect();
+    Ok(list)
+}
+
+#[tauri::command]
+async fn ping_lan_device(ip: String, port: u16) -> Result<LanPingResultDTO, String> {
+    match discovery::ping_lan_http(&ip, port).await {
+        Ok((sukses, latency_ms, resp_text)) => Ok(LanPingResultDTO {
+            sukses,
+            pesan: format!("Perangkat Online ({})", resp_text),
+            latency_ms,
+        }),
+        Err(e) => Ok(LanPingResultDTO {
+            sukses: false,
+            pesan: format!("Gagal: {}", e),
+            latency_ms: 0,
+        }),
+    }
+}
+
+#[tauri::command]
+fn gabung_ke_server(state: State<AppState>, server_ip: String, server_port: u16) -> Result<(), String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let _ = db.conn().execute(
+        "INSERT OR REPLACE INTO app_settings (key, value) VALUES ('lan_server_ip', ?)",
+        rusqlite::params![server_ip],
+    );
+    let _ = db.conn().execute(
+        "INSERT OR REPLACE INTO app_settings (key, value) VALUES ('lan_server_port', ?)",
+        rusqlite::params![server_port.to_string()],
+    );
+    Ok(())
+}
+
+#[tauri::command]
+fn get_supabase_config(state: State<AppState>) -> Result<SupabaseConfigDTO, String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let conn = db.conn();
+
+    let ambil_setting = |k: &str| -> Option<String> {
+        conn.query_row("SELECT value FROM app_settings WHERE key = ?", [k], |r| r.get(0)).ok()
+    };
+
+    let url = ambil_setting("supabase_url").unwrap_or_default();
+    let api_key = ambil_setting("supabase_api_key").unwrap_or_default();
+    let auto_sync = ambil_setting("supabase_auto_sync").map(|v| v == "1" || v == "true").unwrap_or(true);
+    let interval_menit = ambil_setting("supabase_interval")
+        .and_then(|v| v.parse::<u32>().ok())
+        .unwrap_or(5);
+    let last_sync_waktu = ambil_setting("supabase_last_sync_waktu");
+    let last_sync_status = ambil_setting("supabase_last_sync_status");
+
+    let is_bound = !url.trim().is_empty() && !api_key.trim().is_empty();
+    let pending_count = SupabaseClient::count_pending_records(conn, &state.cabang_id);
+
+    Ok(SupabaseConfigDTO {
+        url,
+        api_key,
+        is_bound,
+        auto_sync,
+        interval_menit,
+        pending_count,
+        last_sync_waktu,
+        last_sync_status,
+    })
+}
+
+#[tauri::command]
+fn save_supabase_config(
+    state: State<AppState>,
+    url: String,
+    key: String,
+    auto_sync: bool,
+    interval_menit: u32,
+) -> Result<(), String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let conn = db.conn();
+
+    let auto_sync_str = if auto_sync { "1" } else { "0" };
+    let interval_str = interval_menit.to_string();
+
+    let _ = conn.execute("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('supabase_url', ?)", [&url]);
+    let _ = conn.execute("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('supabase_api_key', ?)", [&key]);
+    let _ = conn.execute("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('supabase_auto_sync', ?)", [&auto_sync_str]);
+    let _ = conn.execute("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('supabase_interval', ?)", [&interval_str]);
+
+    Ok(())
+}
+
+#[tauri::command]
+async fn test_supabase_connection(url: String, key: String) -> Result<SupabaseTestResultDTO, String> {
+    match SupabaseClient::test_connection(&url, &key).await {
+        Ok(latency_ms) => Ok(SupabaseTestResultDTO {
+            sukses: true,
+            pesan: format!("Terhubung ke Supabase Cloud ({} ms)", latency_ms),
+            latency_ms,
+        }),
+        Err(e) => Ok(SupabaseTestResultDTO {
+            sukses: false,
+            pesan: e,
+            latency_ms: 0,
+        }),
+    }
+}
+
+#[tauri::command]
+async fn sync_supabase_now(state: State<'_, AppState>) -> Result<SupabaseSyncResultDTO, String> {
+    let (url, api_key, cabang_id) = {
+        let db = state.db.lock().map_err(|e| e.to_string())?;
+        let conn = db.conn();
+        let ambil_setting = |k: &str| -> Option<String> {
+            conn.query_row("SELECT value FROM app_settings WHERE key = ?", [k], |r| r.get(0)).ok()
+        };
+        (
+            ambil_setting("supabase_url").unwrap_or_default(),
+            ambil_setting("supabase_api_key").unwrap_or_default(),
+            state.cabang_id.clone(),
+        )
+    };
+
+    if url.trim().is_empty() || api_key.trim().is_empty() {
+        return Err("Supabase belum dikonfigurasi. Masukkan URL dan API Key terlebih dahulu.".to_string());
+    }
+
+    let res = SupabaseClient::push_full_batch(&url, &api_key, &state.db, &cabang_id).await?;
+
+    let now_str = chrono::Utc::now().to_rfc3339();
+    let status_str = if res.sukses { "sukses" } else { "gagal_parsial" };
+    if let Ok(db) = state.db.lock() {
+        let _ = db.conn().execute("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('supabase_last_sync_waktu', ?)", [&now_str]);
+        let _ = db.conn().execute("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('supabase_last_sync_status', ?)", [&status_str]);
+    }
+
+    Ok(SupabaseSyncResultDTO {
+        sukses: res.sukses,
+        total_dikirim: res.total_dikirim,
+        total_berhasil: res.total_berhasil,
+        total_gagal: res.total_gagal,
+        durasi_ms: res.durasi_ms,
+        pesan: res.pesan,
+    })
+}
+
+#[tauri::command]
+fn get_supabase_sql_ddl() -> Result<String, String> {
+    Ok(SupabaseClient::get_supabase_ddl().to_string())
+}
+
+#[tauri::command]
+fn get_sync_log(state: State<AppState>, limit: Option<usize>) -> Result<Vec<SyncLogDTO>, String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let items = SupabaseClient::ambil_sync_log(db.conn(), limit.unwrap_or(20));
+    Ok(items.into_iter().map(|it| SyncLogDTO {
+        id: it.id,
+        waktu: it.waktu,
+        tabel: it.tabel,
+        jumlah_record: it.jumlah_record,
+        status: it.status,
+        pesan: it.pesan,
+        durasi_ms: it.durasi_ms,
+    }).collect())
 }
 
 #[tauri::command]
@@ -1060,6 +1359,7 @@ fn get_product_stats(_state: State<AppState>) -> Result<ProductStatsDTO, String>
 
 #[tauri::command]
 fn scan_barcode(state: State<AppState>, code: String) -> Result<CartSummaryDTO, String> {
+    pastikan_lisensi_aktif()?;
     let mut svc = state.kasir.lock().map_err(|e| e.to_string())?;
     let db = state.db.lock().map_err(|e| e.to_string())?;
 
@@ -1072,6 +1372,7 @@ fn scan_barcode(state: State<AppState>, code: String) -> Result<CartSummaryDTO, 
 
 #[tauri::command]
 fn update_cart_qty(state: State<AppState>, index: usize, qty: f64) -> Result<CartSummaryDTO, String> {
+    pastikan_lisensi_aktif()?;
     let mut svc = state.kasir.lock().map_err(|e| e.to_string())?;
     if index < svc.keranjang.len() {
         let _ = svc.ubah_qty(index, qty);
@@ -1081,6 +1382,7 @@ fn update_cart_qty(state: State<AppState>, index: usize, qty: f64) -> Result<Car
 
 #[tauri::command]
 fn remove_cart_item(state: State<AppState>, index: usize) -> Result<CartSummaryDTO, String> {
+    pastikan_lisensi_aktif()?;
     let mut svc = state.kasir.lock().map_err(|e| e.to_string())?;
     if index < svc.keranjang.len() {
         let _ = svc.hapus_item(index);
@@ -1090,6 +1392,7 @@ fn remove_cart_item(state: State<AppState>, index: usize) -> Result<CartSummaryD
 
 #[tauri::command]
 fn clear_cart(state: State<AppState>) -> Result<CartSummaryDTO, String> {
+    pastikan_lisensi_aktif()?;
     let mut svc = state.kasir.lock().map_err(|e| e.to_string())?;
     svc.bersihkan_keranjang();
     Ok(build_cart_summary(&svc))
@@ -1103,6 +1406,7 @@ fn get_cart(state: State<AppState>) -> Result<CartSummaryDTO, String> {
 
 #[tauri::command]
 fn checkout(state: State<AppState>, tunai: f64, metode: String) -> Result<CheckoutResultDTO, String> {
+    pastikan_lisensi_aktif()?;
     let mut svc = state.kasir.lock().map_err(|e| e.to_string())?;
     let mut db = state.db.lock().map_err(|e| e.to_string())?;
 
@@ -1223,7 +1527,9 @@ fn minimize_window(window: tauri::Window) {
 
 #[tauri::command]
 fn toggle_maximize_window(window: tauri::Window) {
-    if let Ok(is_max) = window.is_maximized() {
+    if let Ok(is_fullscreen) = window.is_fullscreen() {
+        let _ = window.set_fullscreen(!is_fullscreen);
+    } else if let Ok(is_max) = window.is_maximized() {
         if is_max {
             let _ = window.unmaximize();
         } else {
@@ -1571,18 +1877,93 @@ fn main() {
 
     let kasir_svc = KasirService::new(cabang_id.clone(), device_id.clone());
 
+    let shared_db = Arc::new(Mutex::new(db));
+
+    let (device_role, cabang_nama, device_nama) = {
+        let guard = shared_db.lock().unwrap();
+        let repo = CabangRepo::new(guard.conn());
+        let d = repo.ambil_device_pertama(&cabang_id).ok().flatten();
+        let c = repo.semua_cabang().ok().and_then(|list| list.into_iter().find(|x| x.id == cabang_id));
+        (
+            d.as_ref().map(|x| x.role.clone()).unwrap_or_else(|| "server".to_string()),
+            c.as_ref().map(|x| x.nama.clone()).unwrap_or_else(|| "Cabang Utama".to_string()),
+            d.as_ref().map(|x| x.nama.clone()).unwrap_or_else(|| "Kasir 1".to_string()),
+        )
+    };
+
+    let machine_id = MachineId::dapatkan();
+    let license_status = match LicenseVerifier::baca_dari_file(LicenseVerifier::path_lisensi_default(), &machine_id) {
+        LicenseStatus::Aktif(_) => "AKTIF".to_string(),
+        _ => "BELUM".to_string(),
+    };
+
+    let discovered_devices = discovery::mulai_listener(machine_id.clone());
+
     let state = AppState {
-        db: Mutex::new(db),
+        db: Arc::clone(&shared_db),
         kasir: Mutex::new(kasir_svc),
-        cabang_id,
-        device_id,
+        cabang_id: cabang_id.clone(),
+        device_id: device_id.clone(),
         shift_id: shift_aktif.id,
         current_operator: Mutex::new(None),
+        discovered_devices,
     };
+
+    let setup_db = Arc::clone(&shared_db);
+    let setup_cabang = cabang_id.clone();
+    let setup_device = device_id.clone();
+    let setup_role = device_role.clone();
+    let setup_cabang_nama = cabang_nama.clone();
+    let setup_device_nama = device_nama.clone();
+    let setup_machine_id = machine_id.clone();
+    let setup_license_status = license_status.clone();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .manage(state)
+        .setup(move |_app| {
+            // 1. Jalankan Axum LAN HTTP Server jika role = 'server'
+            if setup_role == "server" {
+                let lan_db = Arc::clone(&setup_db);
+                let lan_cabang = setup_cabang.clone();
+                let lan_device = setup_device.clone();
+                tauri::async_runtime::spawn(async move {
+                    let lan_state = LanServerState {
+                        cabang_id: lan_cabang,
+                        device_id: lan_device,
+                        db: lan_db,
+                    };
+                    let router = buat_lan_router(lan_state);
+                    match tokio::net::TcpListener::bind("0.0.0.0:7890").await {
+                        Ok(listener) => {
+                            println!("[FAZPOS LAN] Axum HTTP server berjalan di 0.0.0.0:7890");
+                            let _ = axum::serve(listener, router).await;
+                        }
+                        Err(e) => eprintln!("[FAZPOS LAN] Gagal bind port 7890: {}", e),
+                    }
+                });
+            }
+
+            // 2. Jalankan UDP Broadcast Discovery
+            let packet = DiscoveryPacket {
+                app: "fazpos".to_string(),
+                role: setup_role,
+                cabang_id: setup_cabang,
+                cabang_nama: setup_cabang_nama,
+                device_id: setup_device,
+                device_nama: setup_device_nama,
+                machine_id: setup_machine_id,
+                license_status: setup_license_status,
+                port: 7890,
+                ip: "0.0.0.0".to_string(),
+                versi: env!("CARGO_PKG_VERSION").to_string(),
+            };
+            tauri::async_runtime::spawn(async move {
+                discovery::mulai_broadcast(packet, 3000).await;
+            });
+
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             get_status_info,
             get_catalog_products,
@@ -1621,7 +2002,18 @@ fn main() {
             get_network_config,
             simpan_cabang_baru,
             simpan_device_baru,
+            aktivasi_lisensi,
+            get_discovered_devices,
+            ping_lan_device,
+            gabung_ke_server,
+            get_supabase_config,
+            save_supabase_config,
+            test_supabase_connection,
+            sync_supabase_now,
+            get_supabase_sql_ddl,
+            get_sync_log,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
+

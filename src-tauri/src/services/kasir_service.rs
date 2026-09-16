@@ -2,6 +2,7 @@ use crate::db::Database;
 use crate::domain::pelanggan::DPelanggan;
 use crate::domain::transaksi::{KeranjangItem, TPenjualan, TPenjualanPending};
 use crate::repository::barang_repo::BarangRepo;
+use crate::repository::cabang_repo::CabangRepo;
 use crate::repository::hutang_piutang_repo::HutangPiutangRepo;
 use crate::repository::pelanggan_repo::PelangganRepo;
 use crate::repository::pending_repo::PendingRepo;
@@ -286,9 +287,15 @@ impl KasirService {
             ));
         }
 
-        // Generate nomor faktur: format PJ-YYYYMMDDHHMMSS-XXXX (unik per milidetik)
+        // Generate nomor faktur multi-cabang: format KODECABANG-PJ-YYYYMMDDHHMMSS-XXXX
+        let cabang_kode = CabangRepo::new(db.conn())
+            .ambil_cabang_pertama()
+            .ok()
+            .flatten()
+            .map(|c| c.kode)
+            .unwrap_or_else(|| "CAB01".to_string());
         let rand_suffix = &uuid::Uuid::new_v4().to_string()[..4].to_uppercase();
-        let faktur = format!("PJ-{}-{}", Utc::now().format("%Y%m%d%H%M%S"), rand_suffix);
+        let faktur = format!("{}-PJ-{}-{}", cabang_kode, Utc::now().format("%Y%m%d%H%M%S"), rand_suffix);
 
         let kode_pelanggan = self
             .member_terpilih

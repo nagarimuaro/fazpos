@@ -8,15 +8,18 @@
   import CatalogModal from "./components/CatalogModal.svelte";
   import PendingModal from "./components/PendingModal.svelte";
   import CloseKasirModal from "./components/CloseKasirModal.svelte";
+  import HomeView from "./components/HomeView.svelte";
   import TransactionHistoryView from "./components/TransactionHistoryView.svelte";
   import ProductMenuView from "./components/ProductMenuView.svelte";
   import PurchaseHistoryView from "./components/PurchaseHistoryView.svelte";
   import MemberView from "./components/MemberView.svelte";
   import SupplierView from "./components/SupplierView.svelte";
   import DebtView from "./components/DebtView.svelte";
+  import OperationalView from "./components/OperationalView.svelte";
   import ReportsView from "./components/ReportsView.svelte";
   import SettingsView from "./components/SettingsView.svelte";
   import LoginView from "./components/LoginView.svelte";
+  import ActivationLockView from "./components/ActivationLockView.svelte";
   import ChangePasswordModal from "./components/ChangePasswordModal.svelte";
   import {
     api,
@@ -36,8 +39,8 @@
   // Settings & Brand state
   let appSettings = $state<SettingsDTO | null>(null);
 
-  // Navigation state defaults to 'penjualan' (Riwayat Penjualan)
-  let currentView = $state<ViewType>("penjualan");
+  // Navigation state defaults to 'beranda' (Beranda Utama / Dashboard)
+  let currentView = $state<ViewType>("beranda");
   let isCloseKasirModalOpen = $state(false);
 
   let cart: CartSummaryDTO = $state({
@@ -51,10 +54,50 @@
     is_member_attached: true,
   });
 
-  let status: StatusInfoDTO | null = $state(null);
+  let status = $state<StatusInfoDTO | null>(null);
+  const isLicenseActive = $derived(
+    Boolean(status?.license_status && status.license_status !== "BELUM AKTIVASI" && status.license_status.startsWith("TERAKTIVASI"))
+  );
   let isCatalogOpen = $state(false);
   let isPendingOpen = $state(false);
   let pendingCount = $state(3);
+
+  // Cloud & LAN real-time indicators
+  let cloudStatus = $state<"synced" | "pending" | "offline">("offline");
+  let cloudPendingCount = $state(0);
+  let lanDeviceCount = $state(0);
+
+  async function checkCloudAndLanStatus() {
+    try {
+      const cfg = await api.getSupabaseConfig();
+      if (!cfg.is_bound) {
+        cloudStatus = "offline";
+        cloudPendingCount = 0;
+      } else {
+        cloudPendingCount = cfg.pending_count;
+        cloudStatus = cfg.pending_count > 0 ? "pending" : "synced";
+        if (cfg.auto_sync && cfg.pending_count > 0) {
+          try {
+            await api.syncSupabaseNow();
+            const updated = await api.getSupabaseConfig();
+            cloudPendingCount = updated.pending_count;
+            cloudStatus = updated.pending_count > 0 ? "pending" : "synced";
+          } catch {
+            // Abaikan jika network offline
+          }
+        }
+      }
+    } catch {
+      cloudStatus = "offline";
+    }
+
+    try {
+      const devs = await api.getDiscoveredDevices();
+      lanDeviceCount = devs.filter((d) => d.is_online).length;
+    } catch {
+      // Abaikan
+    }
+  }
 
   async function refreshCart() {
     try {
@@ -241,7 +284,12 @@
   }
 
   function handleKeydownGlobal(e: KeyboardEvent) {
-    if (!currentUser) return;
+    if (e.key === "F11") {
+      e.preventDefault();
+      api.toggleMaximizeWindow();
+      return;
+    }
+    if (!isLicenseActive || !currentUser) return;
     if (e.key === "F1" && canOperatorAccess(currentUser, "kasir")) {
       e.preventDefault();
       currentView = "kasir";
@@ -282,11 +330,14 @@
     refreshCart();
     refreshStatus();
     refreshPendingCount();
+    checkCloudAndLanStatus();
     window.addEventListener("keydown", handleKeydownGlobal);
     const clockInterval = setInterval(refreshStatus, 1000);
+    const cloudInterval = setInterval(checkCloudAndLanStatus, 15000);
     return () => {
       window.removeEventListener("keydown", handleKeydownGlobal);
       clearInterval(clockInterval);
+      clearInterval(cloudInterval);
     };
   });
 </script>
@@ -298,6 +349,15 @@
       <span class="text-sm font-medium">Memuat sistem FazPos...</span>
     </div>
   </div>
+{:else if !isLicenseActive}
+  <!-- Layar Kunci Aktivasi: Memblokir Seluruh Fitur Jika Lisensi Belum Aktif -->
+  <ActivationLockView
+    {status}
+    onActivated={async () => {
+      await refreshStatus();
+      await checkAuth();
+    }}
+  />
 {:else if !currentUser}
   <!-- Layar Login (Jika belum login) -->
   <LoginView
@@ -318,12 +378,23 @@
       {status}
       {currentUser}
       {currentView}
+      {cloudStatus}
+      {cloudPendingCount}
+      {lanDeviceCount}
       onNavigate={handleNavigation}
       onOpenChangePassword={() => (isChangePasswordOpen = true)}
       onLogout={handleLogout}
     />
 
-    {#if currentView === "penjualan"}
+    {#if currentView === "beranda"}
+      <!-- Halaman Beranda Utama / Dashboard Toko -->
+      <HomeView
+        {status}
+        {currentUser}
+        {appSettings}
+        onNavigate={handleNavigation}
+      />
+    {:else if currentView === "penjualan"}
       <!-- Halaman Riwayat Penjualan (Default Startup Screen) -->
       <TransactionHistoryView
         onOpenKasir={() => (currentView = "kasir")}
@@ -334,6 +405,9 @@
     {:else if currentView === "pembelian"}
       <!-- Halaman Riwayat Pembelian -->
       <PurchaseHistoryView />
+    {:else if currentView === "operasional"}
+      <!-- Halaman Buku Kas & Biaya Operasional Toko -->
+      <OperationalView />
     {:else if currentView === "member"}
       <!-- Halaman Master Member / Pelanggan -->
       <MemberView />
@@ -406,7 +480,7 @@
       isOpen={isCloseKasirModalOpen}
       onConfirm={() => {
         isCloseKasirModalOpen = false;
-        currentView = "penjualan";
+        currentView = "beranda";
       }}
       onClose={() => (isCloseKasirModalOpen = false)}
     />

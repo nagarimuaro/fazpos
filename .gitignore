@@ -10,5 +10,7 @@ struk_terakhir.bin
 backups/
 node_modules/
 dist/
-
-
+vendor-keygen/
+.DS_Store
+*/.DS_Store
+.fazpos_machine_id

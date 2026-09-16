@@ -125,6 +125,9 @@
     } else if (e.key === "Escape") {
       e.preventDefault();
       api.closeWindow();
+    } else if (e.key === "F11") {
+      e.preventDefault();
+      api.toggleMaximizeWindow();
     }
   }
 

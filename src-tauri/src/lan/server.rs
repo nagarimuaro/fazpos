@@ -109,7 +109,7 @@ async fn handle_checkout(
     );
 
     let rand_suffix = &uuid::Uuid::new_v4().to_string()[..4].to_uppercase();
-    let faktur = format!("PJ-{}-{}", Utc::now().format("%Y%m%d%H%M%S"), rand_suffix);
+    let faktur = format!("{}-PJ-{}-{}", state.cabang_id, Utc::now().format("%Y%m%d%H%M%S"), rand_suffix);
 
     let (header, details) = TPenjualan::buat_transaksi(
         &state.cabang_id,

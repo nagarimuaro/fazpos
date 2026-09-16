@@ -591,6 +591,16 @@ pub fn jalankan_migrasi(conn: &Connection) -> Result<()> {
             key TEXT PRIMARY KEY,
             value TEXT NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS sync_log (
+            id TEXT PRIMARY KEY,
+            waktu TIMESTAMP NOT NULL,
+            tabel TEXT NOT NULL,
+            jumlah_record INTEGER NOT NULL,
+            status TEXT NOT NULL,
+            pesan TEXT,
+            durasi_ms INTEGER
+        );
         "#,
         [],
     );

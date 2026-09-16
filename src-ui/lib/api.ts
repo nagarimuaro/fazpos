@@ -316,10 +316,12 @@ export interface NetworkConfigDTO {
 }
 
 export type ModulePermissionKey =
+  | "beranda"
   | "kasir"
   | "produk"
   | "penjualan"
   | "pembelian"
+  | "operasional"
   | "member"
   | "supplier"
   | "hutang_piutang"
@@ -334,10 +336,12 @@ export interface ModulePermissionDef {
 }
 
 export const ALL_MODULE_PERMISSIONS: ModulePermissionDef[] = [
+  { key: "beranda", label: "Beranda Utama", icon: "dashboard", desc: "Dashboard ringkasan omset, aktivitas & stok" },
   { key: "kasir", label: "Kasir (POS)", icon: "point_of_sale", desc: "Layar transaksi kasir & scan barcode [F1]" },
   { key: "produk", label: "Menu Produk & Stok", icon: "inventory_2", desc: "Katalog produk, edit harga & stok barang [F2]" },
   { key: "penjualan", label: "Riwayat Penjualan", icon: "receipt_long", desc: "Daftar nota penjualan & cetak ulang struk [F3]" },
   { key: "pembelian", label: "Riwayat Pembelian", icon: "local_shipping", desc: "Faktur pembelian & pengadaan barang masuk" },
+  { key: "operasional", label: "Biaya & Operasional", icon: "payments", desc: "Buku kas operasional, beban toko & cashflow" },
   { key: "member", label: "Master Member", icon: "loyalty", desc: "Data pelanggan, tier member & reward poin" },
   { key: "supplier", label: "Master Supplier", icon: "factory", desc: "Daftar rekanan vendor & jadwal pasokan" },
   { key: "hutang_piutang", label: "Hutang & Piutang", icon: "account_balance_wallet", desc: "Buku jatuh tempo hutang dagang & piutang" },
@@ -353,16 +357,18 @@ export function getOperatorPermissions(op: OperatorDTO | null | undefined): Modu
 
   if (op.role.includes(":")) {
     const parts = op.role.split(":");
-    return parts[1].split(",").map((p) => p.trim() as ModulePermissionKey).filter(Boolean);
+    const perms = parts[1].split(",").map((p) => p.trim() as ModulePermissionKey).filter(Boolean);
+    if (!perms.includes("beranda")) perms.unshift("beranda");
+    return perms;
   }
 
   const baseRole = op.role.toLowerCase();
   if (baseRole === "supervisor") {
-    return ["kasir", "produk", "penjualan", "pembelian", "member", "supplier", "hutang_piutang", "laporan"];
+    return ["beranda", "kasir", "produk", "penjualan", "pembelian", "operasional", "member", "supplier", "hutang_piutang", "laporan"];
   } else if (baseRole === "gudang") {
-    return ["produk", "pembelian", "supplier"];
+    return ["beranda", "produk", "pembelian", "supplier"];
   } else {
-    return ["kasir", "penjualan", "member"];
+    return ["beranda", "kasir", "penjualan", "member"];
   }
 }
 
@@ -481,6 +487,7 @@ export const api = {
       ip_address,
     }),
   getStatusInfo: () => invoke<StatusInfoDTO>("get_status_info"),
+  aktivasiLisensi: (token: string) => invoke<StatusInfoDTO>("aktivasi_lisensi", { token }),
   getCatalogProducts: (keyword?: string) =>
     invoke<ProductDTO[]>("get_catalog_products", { keyword }),
   scanBarcode: (code: string) =>
@@ -516,7 +523,94 @@ export const api = {
   minimizeWindow: () => invoke("minimize_window"),
   toggleMaximizeWindow: () => invoke("toggle_maximize_window"),
   closeWindow: () => invoke("close_window"),
+
+  /* ── LAN Discovery & Multi-Kasir ── */
+  getDiscoveredDevices: () => invoke<DiscoveredDeviceDTO[]>("get_discovered_devices"),
+  pingLanDevice: (ip: string, port: number) =>
+    invoke<LanPingResultDTO>("ping_lan_device", { ip, port }),
+  gabungKeServer: (serverIp: string, serverPort: number) =>
+    invoke<void>("gabung_ke_server", {
+      serverIp,
+      serverPort,
+      server_ip: serverIp,
+      server_port: serverPort,
+    }),
+
+  /* ── Supabase BYO-Cloud Sync ── */
+  getSupabaseConfig: () => invoke<SupabaseConfigDTO>("get_supabase_config"),
+  saveSupabaseConfig: (url: string, key: string, autoSync: boolean, intervalMenit: number) =>
+    invoke<void>("save_supabase_config", {
+      url,
+      key,
+      autoSync,
+      intervalMenit,
+      auto_sync: autoSync,
+      interval_menit: intervalMenit,
+    }),
+  testSupabaseConnection: (url: string, key: string) =>
+    invoke<SupabaseTestResultDTO>("test_supabase_connection", { url, key }),
+  syncSupabaseNow: () => invoke<SupabaseSyncResultDTO>("sync_supabase_now"),
+  getSupabaseSqlDdl: () => invoke<string>("get_supabase_sql_ddl"),
+  getSyncLog: (limit?: number) => invoke<SyncLogDTO[]>("get_sync_log", { limit }),
 };
+
+export interface DiscoveredDeviceDTO {
+  device_id: string;
+  device_nama: string;
+  cabang_id: string;
+  cabang_nama: string;
+  role: string;
+  ip_address: string;
+  port: number;
+  machine_id: string;
+  license_status: string;
+  versi: string;
+  is_online: boolean;
+  last_seen: string;
+  latency_ms?: number;
+}
+
+export interface LanPingResultDTO {
+  sukses: boolean;
+  pesan: string;
+  latency_ms: number;
+}
+
+export interface SupabaseConfigDTO {
+  url: string;
+  api_key: string;
+  is_bound: boolean;
+  auto_sync: boolean;
+  interval_menit: number;
+  pending_count: number;
+  last_sync_waktu?: string;
+  last_sync_status?: string;
+}
+
+export interface SupabaseTestResultDTO {
+  sukses: boolean;
+  pesan: string;
+  latency_ms: number;
+}
+
+export interface SupabaseSyncResultDTO {
+  sukses: boolean;
+  total_dikirim: number;
+  total_berhasil: number;
+  total_gagal: number;
+  durasi_ms: number;
+  pesan: string;
+}
+
+export interface SyncLogDTO {
+  id: string;
+  waktu: string;
+  tabel: string;
+  jumlah_record: number;
+  status: string;
+  pesan?: string;
+  durasi_ms?: number;
+}
 
 /* ── Helpers ── */
 

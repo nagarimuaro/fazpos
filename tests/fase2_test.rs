@@ -21,12 +21,12 @@ fn test_machine_id_format_dan_deterministik() {
     let id2 = MachineId::format_hash(raw);
 
     assert_eq!(id1, id2, "Machine ID harus deterministik untuk input hardware yang sama");
-    assert!(id1.starts_with("RTG-"), "Machine ID harus berawalan prefix RTG-");
-    assert_eq!(id1.len(), 23, "Format RTG-XXXX-XXXX-XXXX-XXXX panjangnya 23 karakter");
+    assert!(id1.starts_with("FAZ-"), "Machine ID harus berawalan prefix FAZ-");
+    assert_eq!(id1.len(), 23, "Format FAZ-XXXX-XXXX-XXXX-XXXX panjangnya 23 karakter");
 
     // Test Machine ID aktual dari mesin ini
     let current_id = MachineId::dapatkan();
-    assert!(current_id.starts_with("RTG-"));
+    assert!(current_id.starts_with("FAZ-"));
     assert_eq!(current_id.len(), 23);
 }
 
@@ -34,7 +34,7 @@ fn test_machine_id_format_dan_deterministik() {
 fn test_lisensi_valid_ed25519() {
     let (signing_key, pub_bytes) = buat_test_keypair();
 
-    let machine_id = "RTG-1A2B-3C4D-5E6F-7890";
+    let machine_id = "FAZ-1A2B-3C4D-5E6F-7890";
     let payload = LicensePayload::baru_lifetime(machine_id, "Toko Sentosa Jaya", "2026-09-09");
     let payload_json = serde_json::to_string(&payload).unwrap();
 
@@ -59,8 +59,8 @@ fn test_lisensi_valid_ed25519() {
 fn test_lisensi_gagal_jika_machine_id_berbeda() {
     let (signing_key, pub_bytes) = buat_test_keypair();
 
-    let machine_id_asli = "RTG-1111-2222-3333-4444";
-    let machine_id_bajakan = "RTG-9999-8888-7777-6666";
+    let machine_id_asli = "FAZ-1111-2222-3333-4444";
+    let machine_id_bajakan = "FAZ-9999-8888-7777-6666";
 
     let payload = LicensePayload::baru_lifetime(machine_id_asli, "Toko Sentosa", "2026-09-09");
     let payload_json = serde_json::to_string(&payload).unwrap();
@@ -84,7 +84,7 @@ fn test_lisensi_gagal_jika_machine_id_berbeda() {
 fn test_lisensi_gagal_jika_payload_dimodifikasi() {
     let (signing_key, pub_bytes) = buat_test_keypair();
 
-    let machine_id = "RTG-1A2B-3C4D-5E6F-7890";
+    let machine_id = "FAZ-1A2B-3C4D-5E6F-7890";
     let payload = LicensePayload::baru_lifetime(machine_id, "Toko Asli", "2026-09-09");
     let payload_json = serde_json::to_string(&payload).unwrap();
 
@@ -111,7 +111,7 @@ fn test_lisensi_gagal_jika_payload_dimodifikasi() {
 fn test_penyimpanan_file_lisensi_lokal_dan_anti_tamper() {
     let (signing_key, pub_bytes) = buat_test_keypair();
 
-    let machine_id = "RTG-TEST-FILE-0001-0002";
+    let machine_id = "FAZ-TEST-FILE-0001-0002";
     let payload = LicensePayload::baru_lifetime(machine_id, "Toko Sukses", "2026-09-09");
     let payload_json = serde_json::to_string(&payload).unwrap();
     let signature = signing_key.sign(payload_json.as_bytes());
@@ -134,7 +134,7 @@ fn test_penyimpanan_file_lisensi_lokal_dan_anti_tamper() {
     // 3. Coba baca file yang sama dari mesin lain -> harus Ditolak (anti-tamper checksum mismatch)
     let status_mesin_lain = LicenseVerifier::baca_dari_file_dengan_key(
         &temp_file,
-        "RTG-MESIN-LAIN-0000-0000",
+        "FAZ-MESIN-LAIN-0000-0000",
         &pub_bytes,
     );
     assert!(matches!(status_mesin_lain, LicenseStatus::TidakValid(_)));

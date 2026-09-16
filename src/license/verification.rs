@@ -9,10 +9,10 @@ use std::path::{Path, PathBuf};
 // Public Key default Ed25519 vendor (32 bytes) yang tertanam di binary klien
 // Hanya bisa digunakan untuk memverifikasi token, tidak dapat digunakan untuk memalsukan/membuat token baru.
 pub const EMBEDDED_VENDOR_PUBLIC_KEY: [u8; 32] = [
-    0xe9, 0xc8, 0x5d, 0x53, 0x2c, 0xde, 0xb8, 0xb8,
-    0x73, 0x31, 0x11, 0x17, 0x68, 0x52, 0xbb, 0x78,
-    0x5e, 0x01, 0xa6, 0xe3, 0xa8, 0x65, 0x7b, 0xb7,
-    0xf1, 0xb2, 0x74, 0xc9, 0xae, 0x68, 0xd9, 0x4a,
+    0x6d, 0x47, 0x3f, 0xde, 0x1c, 0x40, 0x60, 0x7e, 
+    0xc7, 0xa9, 0x8b, 0x1b, 0xfb, 0xc7, 0x05, 0xdd, 
+    0x2a, 0xeb, 0x0f, 0xd8, 0xde, 0x14, 0xf7, 0x66, 
+    0xc9, 0xe0, 0x9b, 0xc5, 0x70, 0x1a, 0x5e, 0xc6, 
 ];
 
 #[derive(Debug, Clone, PartialEq)]
@@ -25,11 +25,42 @@ pub enum LicenseStatus {
 pub struct LicenseVerifier;
 
 impl LicenseVerifier {
-    /// Verifikasi token menggunakan public key vendor tertanam dan Machine ID saat ini
+    /// Hasilkan serial token 16-digit (format: XXXX-XXXX-XXXX-XXXX) berbasis Machine ID
+    pub fn hitung_serial_16(machine_id: &str) -> String {
+        let mut hasher = Sha256::new();
+        hasher.update(b"FAZPOS_SERIAL_SECRET_2026_");
+        hasher.update(machine_id.trim().as_bytes());
+        let result = hasher.finalize();
+        let hex: String = result.iter().map(|b| format!("{:02X}", b)).collect();
+        format!("{}-{}-{}-{}", &hex[0..4], &hex[4..8], &hex[8..12], &hex[12..16])
+    }
+
+    /// Verifikasi serial token 16-digit terhadap Machine ID
+    pub fn verifikasi_serial_16(serial_token: &str, current_machine_id: &str) -> bool {
+        let clean_input = serial_token.replace("-", "").trim().to_uppercase();
+        let expected = Self::hitung_serial_16(current_machine_id).replace("-", "");
+        clean_input == expected
+    }
+
+    /// Verifikasi token menggunakan serial 16-digit atau public key vendor tertanam
     pub fn verifikasi(
         token_str: &str,
         current_machine_id: &str,
     ) -> Result<LicensePayload, String> {
+        let token_trim = token_str.trim();
+        let clean_token = token_trim.replace("-", "");
+        if clean_token.len() == 16 {
+            if Self::verifikasi_serial_16(token_trim, current_machine_id) {
+                return Ok(LicensePayload::baru_lifetime(
+                    current_machine_id,
+                    "MUEEZA STORE",
+                    "2026-09-14",
+                ));
+            } else {
+                return Err("Serial token 16 digit tidak cocok dengan Machine ID perangkat ini!".to_string());
+            }
+        }
+
         Self::verifikasi_dengan_public_key(token_str, current_machine_id, &EMBEDDED_VENDOR_PUBLIC_KEY)
     }
 
@@ -127,7 +158,22 @@ impl LicenseVerifier {
             );
         }
 
-        match Self::verifikasi_dengan_public_key(token_str, current_machine_id, public_key_bytes) {
+        let clean_token = token_str.replace("-", "");
+        let verify_result = if clean_token.len() == 16 {
+            if Self::verifikasi_serial_16(token_str, current_machine_id) {
+                Ok(LicensePayload::baru_lifetime(
+                    current_machine_id,
+                    "MUEEZA STORE",
+                    "2026-09-14",
+                ))
+            } else {
+                Err("Serial token tidak cocok dengan mesin ini".to_string())
+            }
+        } else {
+            Self::verifikasi_dengan_public_key(token_str, current_machine_id, public_key_bytes)
+        };
+
+        match verify_result {
             Ok(payload) => LicenseStatus::Aktif(payload),
             Err(err) => LicenseStatus::TidakValid(err),
         }
