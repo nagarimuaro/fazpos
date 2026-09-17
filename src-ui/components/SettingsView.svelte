@@ -275,6 +275,20 @@
   let pingResults = $state<
     Record<string, { sukses: boolean; pesan: string; latency_ms: number }>
   >({});
+  // Manual LAN Connection State
+  let isManualConnectOpen = $state(false);
+  let manualServerIp = $state("");
+  let manualServerPort = $state(7890);
+  let isConnectingManual = $state(false);
+
+  // Multi-Cabang & Toko Role State
+  let tokoMode = $state<"pusat" | "cabang">("pusat");
+  let isSwitchingMode = $state(false);
+  let isPullingMaster = $state(false);
+  let selectedCabangId = $state("");
+  let cabangSyncTab = $state<"wifi" | "cloud">("wifi");
+  let cloudCabangList = $state<any[]>([]);
+  let isLoadingCloudCabang = $state(false);
 
   // Supabase BYO-Cloud State
   let supabaseConfig = $state<SupabaseConfigDTO>({
@@ -333,6 +347,34 @@
       );
     } catch (e: any) {
       showToast("Gagal gabung server: " + (e?.message || e));
+    }
+  }
+
+  async function handleManualConnect() {
+    if (!manualServerIp.trim()) {
+      showToast("Harap masukkan IP Address Master Server");
+      return;
+    }
+    isConnectingManual = true;
+    try {
+      const dev = await api.hubungkanLanManual(
+        manualServerIp.trim(),
+        manualServerPort || 7890,
+      );
+      await loadLanDevices();
+      if (networkConfig?.device_role === "client") {
+        await api.gabungKeServer(dev.ip_address, dev.port);
+        networkConfig.server_ip = dev.ip_address;
+      }
+      showToast(
+        `Berhasil terhubung ke ${dev.device_nama} (${dev.ip_address}:${dev.port})!`,
+      );
+      isManualConnectOpen = false;
+      manualServerIp = "";
+    } catch (e: any) {
+      showToast("Gagal hubungkan ke IP server: " + (e?.message || e));
+    } finally {
+      isConnectingManual = false;
     }
   }
 
@@ -426,11 +468,94 @@
     isNetworkLoading = true;
     try {
       networkConfig = await api.getNetworkConfig();
+      if (networkConfig?.toko_mode) {
+        tokoMode = networkConfig.toko_mode;
+      } else if (networkConfig) {
+        tokoMode = networkConfig.is_pusat ? "pusat" : "cabang";
+      }
+      if (networkConfig?.cabang_id) {
+        selectedCabangId = networkConfig.cabang_id;
+      }
       await Promise.allSettled([loadLanDevices(), loadSupabaseConfig()]);
     } catch (e) {
       console.warn("loadNetworkConfig:", e);
     } finally {
       isNetworkLoading = false;
+    }
+  }
+
+  async function handleGantiTokoMode(mode: "pusat" | "cabang") {
+    isSwitchingMode = true;
+    try {
+      await api.setTokoMode(mode, selectedCabangId || undefined);
+      tokoMode = mode;
+      await loadNetworkConfig();
+      showToast(
+        mode === "pusat"
+          ? "Beralih ke Toko Pusat (Master Database & Tambah Cabang)."
+          : "Beralih ke Toko Cabang (Penerima Data Master Pusat).",
+      );
+    } catch (e: any) {
+      showToast("Gagal ubah mode toko: " + (e?.message || e));
+    } finally {
+      isSwitchingMode = false;
+    }
+  }
+
+  async function handleTarikMasterLan(serverIp?: string) {
+    const targetIp = serverIp || manualServerIp.trim() || networkConfig?.server_ip || "192.168.100.75";
+    isPullingMaster = true;
+    try {
+      const count = await api.tarikMasterDariPusatLan(targetIp, 7890);
+      await loadNetworkConfig();
+      showToast(`Berhasil menarik ${count} produk master dari Pusat via Wi-Fi!`);
+    } catch (e: any) {
+      showToast("Gagal tarik data dari Pusat: " + (e?.message || e));
+    } finally {
+      isPullingMaster = false;
+    }
+  }
+
+  async function handleTarikMasterCloud() {
+    if (!supabaseConfig.url || !supabaseConfig.api_key) {
+      showToast("Harap isi URL & API Key Cloud Supabase terlebih dahulu.");
+      return;
+    }
+    isPullingMaster = true;
+    try {
+      const count = await api.tarikMasterDariSupabase(selectedCabangId || undefined);
+      await loadNetworkConfig();
+      showToast(`Berhasil menarik ${count} produk master dari Cloud Supabase!`);
+    } catch (e: any) {
+      showToast("Gagal tarik dari Cloud: " + (e?.message || e));
+    } finally {
+      isPullingMaster = false;
+    }
+  }
+
+  async function handlePilihCabang(cabangId: string) {
+    selectedCabangId = cabangId;
+    try {
+      await api.setTokoMode("cabang", cabangId);
+      await loadNetworkConfig();
+      showToast("Identitas cabang berhasil diperbarui!");
+    } catch (e: any) {
+      showToast("Gagal mengubah cabang: " + (e?.message || e));
+    }
+  }
+
+  async function handleMuatCabangCloud() {
+    isLoadingCloudCabang = true;
+    try {
+      cloudCabangList = await api.getCloudCabangList(
+        supabaseConfig.url || undefined,
+        supabaseConfig.api_key || undefined,
+      );
+      showToast(`Ditemukan ${cloudCabangList.length} cabang di Cloud.`);
+    } catch (e: any) {
+      showToast("Gagal memuat cabang dari cloud: " + (e?.message || e));
+    } finally {
+      isLoadingCloudCabang = false;
     }
   }
 
@@ -1738,569 +1863,463 @@
         </div>
       {:else if activeTab === "jaringan"}
         <div class="max-w-4xl flex flex-col gap-5">
-          <!-- Header -->
-          <div class="flex items-center justify-between">
-            <div>
-              <h3
-                class="font-bold text-slate-900 text-base font-sans flex items-center gap-2"
+          <!-- Header & Mode Switcher -->
+          <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-4">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h3 class="font-bold text-slate-900 text-base flex items-center gap-2">
+                  <span class="material-symbols-outlined text-primary text-[22px]">storefront</span>
+                  <span>Pengaturan Multi-Cabang &amp; Sinkronisasi Data</span>
+                </h3>
+                <p class="text-slate-500 text-xs mt-0.5">
+                  Satu database terpusat untuk seluruh cabang (Wi-Fi lokal maupun luar kota via Cloud).
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onclick={() => {
+                  loadNetworkConfig();
+                  showToast("Data jaringan & cabang diperbarui.");
+                }}
+                class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg text-xs font-semibold border border-slate-300 shadow-2xs transition-all cursor-pointer self-start sm:self-auto shrink-0"
               >
-                <span class="material-symbols-outlined text-primary">lan</span>
-                Arsitektur Multi-Cabang &amp; Multi-Device LAN
-              </h3>
-              <p class="text-slate-500 text-xs mt-0.5">
-                Konfigurasi node server lokal port 7890, terminal kasir client,
-                dan manajemen multi-outlet toko.
-              </p>
+                <span
+                  class="material-symbols-outlined text-[16px] text-primary {isNetworkLoading
+                    ? 'animate-spin'
+                    : ''}">sync</span
+                >
+                <span>Segarkan Data</span>
+              </button>
             </div>
 
-            <button
-              type="button"
-              onclick={() => {
-                loadNetworkConfig();
-                showToast("Status jaringan & perangkat diperbarui.");
-              }}
-              class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg text-xs font-semibold border border-slate-300 shadow-2xs transition-all cursor-pointer"
-            >
-              <span
-                class="material-symbols-outlined text-[16px] text-primary {isNetworkLoading
-                  ? 'animate-spin'
-                  : ''}">sync</span
-              >
-              <span>Segarkan Node</span>
-            </button>
+            <!-- Switcher Peran Toko: Toko Pusat vs Toko Cabang -->
+            <div class="pt-3 border-t border-slate-100">
+              <span class="block text-xs font-bold text-slate-700 mb-2">Pilih Peran Komputer Ini:</span>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <!-- Pilihan 1: Toko Pusat -->
+                <button
+                  type="button"
+                  onclick={() => handleGantiTokoMode("pusat")}
+                  disabled={isSwitchingMode}
+                  class="p-3.5 rounded-xl border text-left cursor-pointer transition-all flex items-start gap-3 {tokoMode === 'pusat'
+                    ? 'border-primary bg-primary/5 ring-2 ring-primary/20'
+                    : 'border-slate-200 bg-white hover:border-slate-300'}"
+                >
+                  <div class="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 {tokoMode === 'pusat' ? 'bg-primary text-white' : 'bg-slate-100 text-slate-500'}">
+                    <span class="material-symbols-outlined text-[20px]">domain</span>
+                  </div>
+                  <div class="space-y-0.5">
+                    <div class="flex items-center gap-2">
+                      <span class="font-bold text-xs text-slate-900">🏢 Toko Pusat (Headquarters)</span>
+                      {#if tokoMode === "pusat"}
+                        <span class="px-1.5 py-0.2 rounded text-[9px] font-bold bg-primary text-white">AKTIF</span>
+                      {/if}
+                    </div>
+                    <p class="text-[11px] text-slate-500 leading-snug">
+                      Pusat master produk, harga, dan pendaftaran cabang. Hanya Pusat yang berhak menambah cabang baru.
+                    </p>
+                  </div>
+                </button>
+
+                <!-- Pilihan 2: Toko Cabang -->
+                <button
+                  type="button"
+                  onclick={() => handleGantiTokoMode("cabang")}
+                  disabled={isSwitchingMode}
+                  class="p-3.5 rounded-xl border text-left cursor-pointer transition-all flex items-start gap-3 {tokoMode === 'cabang'
+                    ? 'border-emerald-600 bg-emerald-50/40 ring-2 ring-emerald-500/20'
+                    : 'border-slate-200 bg-white hover:border-slate-300'}"
+                >
+                  <div class="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 {tokoMode === 'cabang' ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-500'}">
+                    <span class="material-symbols-outlined text-[20px]">store</span>
+                  </div>
+                  <div class="space-y-0.5">
+                    <div class="flex items-center gap-2">
+                      <span class="font-bold text-xs text-slate-900">🏪 Toko Cabang (Outlet)</span>
+                      {#if tokoMode === "cabang"}
+                        <span class="px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-600 text-white">AKTIF</span>
+                      {/if}
+                    </div>
+                    <p class="text-[11px] text-slate-500 leading-snug">
+                      Mengambil katalog produk dari Toko Pusat. Kasir tetap bisa jualan lancar saat offline (tanpa internet).
+                    </p>
+                  </div>
+                </button>
+              </div>
+            </div>
           </div>
 
-          <!-- Quick Link Banner to Cloud Supabase -->
-          <div class="p-3.5 bg-gradient-to-r from-sky-50 to-blue-50 border border-sky-200 rounded-xl flex items-center justify-between shadow-2xs">
-            <div class="flex items-center gap-3">
-              <div class="w-9 h-9 rounded-lg bg-sky-600 text-white flex items-center justify-center shrink-0 shadow-xs">
-                <span class="material-symbols-outlined text-[20px]">cloud_sync</span>
+          <!-- TAMPILAN JIKA MODE TOKO PUSAT -->
+          {#if tokoMode === "pusat"}
+            <!-- Kartu 1: Daftar Cabang (Hanya Pusat yang menambah cabang) -->
+            <div class="p-4 bg-white border border-slate-200 rounded-2xl shadow-2xs space-y-3">
+              <div class="flex items-center justify-between">
+                <div>
+                  <div class="font-bold text-slate-900 text-xs flex items-center gap-2">
+                    <span class="material-symbols-outlined text-primary text-[18px]">store</span>
+                    <span>Daftar Cabang Toko Anda</span>
+                    <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-primary/10 text-primary">
+                      {networkConfig?.daftar_cabang?.length || 1} Cabang
+                    </span>
+                  </div>
+                  <p class="text-[11px] text-slate-500 mt-0.5">
+                    Hanya Toko Pusat yang dapat mendaftarkan cabang baru agar struktur database tetap teratur dan seragam.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onclick={() => (isAddCabangOpen = true)}
+                  class="flex items-center gap-1.5 px-3 py-1.5 bg-primary hover:bg-primary-dark text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer border-none transition-all"
+                >
+                  <span class="material-symbols-outlined text-[16px]">add</span>
+                  <span>+ Tambah Cabang Baru</span>
+                </button>
               </div>
+
+              <!-- Tabel Cabang -->
+              <div class="border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
+                <table class="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr class="bg-slate-100 border-b border-slate-200 text-slate-700 font-bold uppercase tracking-wider text-[10px]">
+                      <th class="py-2.5 px-3">Kode</th>
+                      <th class="py-2.5 px-3">Nama Cabang</th>
+                      <th class="py-2.5 px-3">Alamat / Lokasi</th>
+                      <th class="py-2.5 px-3">Telepon</th>
+                      <th class="py-2.5 px-3 text-center">Tipe</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-slate-100">
+                    {#if !networkConfig?.daftar_cabang || networkConfig.daftar_cabang.length === 0}
+                      <tr>
+                        <td colspan="5" class="py-4 text-center text-slate-400 text-xs">
+                          Belum ada cabang terdaftar.
+                        </td>
+                      </tr>
+                    {:else}
+                      {#each networkConfig.daftar_cabang as c}
+                        <tr class="hover:bg-slate-50/80 transition-all {c.is_pusat ? 'bg-primary/5 font-semibold' : ''}">
+                          <td class="py-2.5 px-3 font-mono text-[11px] font-bold text-slate-900">
+                            {c.kode}
+                          </td>
+                          <td class="py-2.5 px-3 text-slate-900 font-medium">
+                            {c.nama}
+                          </td>
+                          <td class="py-2.5 px-3 text-slate-500 text-[11px]">
+                            {c.alamat || "-"}
+                          </td>
+                          <td class="py-2.5 px-3 text-slate-500 text-[11px] font-mono">
+                            {c.telepon || "-"}
+                          </td>
+                          <td class="py-2.5 px-3 text-center">
+                            {#if c.is_pusat}
+                              <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-primary text-white">
+                                TOKO PUSAT
+                              </span>
+                            {:else}
+                              <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-200 text-slate-700">
+                                CABANG
+                              </span>
+                            {/if}
+                          </td>
+                        </tr>
+                      {/each}
+                    {/if}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Kartu 2: Hubungkan Cabang Di Luar Jaringan (Cloud Supabase) -->
+            <div class="p-4 bg-white border border-slate-200 rounded-2xl shadow-2xs space-y-3">
+              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div class="flex items-center gap-2.5">
+                  <div class="w-8 h-8 rounded-lg bg-sky-600 text-white flex items-center justify-center shrink-0">
+                    <span class="material-symbols-outlined text-[18px]">cloud_sync</span>
+                  </div>
+                  <div>
+                    <div class="font-bold text-slate-900 text-xs flex items-center gap-2">
+                      <span>Jembatan Cloud Supabase (Cabang Luar Jaringan / Beda Kota)</span>
+                      <span class="px-2 py-0.5 rounded text-[10px] font-bold font-mono {supabaseConfig.is_bound ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'}">
+                        {supabaseConfig.is_bound ? "TERHUBUNG" : "BELUM AKTIF"}
+                      </span>
+                    </div>
+                    <p class="text-[11px] text-slate-500 mt-0.5">
+                      Untuk cabang di ruko lain atau beda kota, aktifkan Cloud agar cabang bisa mengambil master produk Pusat.
+                    </p>
+                  </div>
+                </div>
+
+                <div class="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onclick={() => {
+                      activeTab = "supabase";
+                      loadSupabaseConfig();
+                    }}
+                    class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold cursor-pointer border border-slate-300"
+                  >
+                    Atur Cloud
+                  </button>
+                  <button
+                    type="button"
+                    onclick={handleSyncSupabaseNow}
+                    disabled={isSyncingSupabase || !supabaseConfig.is_bound}
+                    class="px-3 py-1.5 bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white rounded-lg text-xs font-bold cursor-pointer border-none shadow-xs flex items-center gap-1.5"
+                  >
+                    {#if isSyncingSupabase}
+                      <span class="material-symbols-outlined text-[14px] animate-spin">progress_activity</span>
+                      <span>Mengirim...</span>
+                    {:else}
+                      <span class="material-symbols-outlined text-[14px]">cloud_upload</span>
+                      <span>Kirim Master Produk ke Cloud</span>
+                    {/if}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Kartu 3: Jaringan Wi-Fi Toko (Satu Gedung) -->
+            <div class="p-4 bg-white border border-slate-200 rounded-2xl shadow-2xs space-y-3">
+              <div class="flex items-center justify-between">
+                <div>
+                  <div class="font-bold text-slate-900 text-xs flex items-center gap-2">
+                    <span class="material-symbols-outlined text-primary text-[18px]">wifi</span>
+                    <span>Jaringan Wi-Fi Toko (Satu Gedung)</span>
+                  </div>
+                  <p class="text-[11px] text-slate-500 mt-0.5">
+                    Kasir cabang di ruangan/gedung yang sama dapat terhubung langsung ke komputer Server ini.
+                  </p>
+                </div>
+                <div class="px-2.5 py-1 rounded-lg bg-slate-100 border border-slate-200 font-mono text-xs font-bold text-slate-800">
+                  IP Server Ini: {networkConfig?.ip_address || "192.168.100.75"}:7890
+                </div>
+              </div>
+
+              {#if discoveredDevices.length > 0}
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-slate-100">
+                  {#each discoveredDevices as dev}
+                    <div class="p-2.5 bg-slate-50 rounded-lg border border-slate-200 text-xs flex items-center justify-between">
+                      <div class="flex items-center gap-2">
+                        <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                        <span class="font-bold text-slate-800">{dev.device_nama}</span>
+                        <span class="text-slate-400 font-mono text-[10px]">({dev.ip_address})</span>
+                      </div>
+                      <span class="px-1.5 py-0.2 rounded text-[9px] font-bold bg-blue-100 text-blue-800 uppercase">
+                        {dev.role}
+                      </span>
+                    </div>
+                  {/each}
+                </div>
+              {/if}
+            </div>
+
+          <!-- TAMPILAN JIKA MODE TOKO CABANG -->
+          {:else}
+            <!-- Banner Penjelasan Toko Cabang -->
+            <div class="p-4 bg-emerald-50/80 border border-emerald-200 rounded-2xl flex items-start gap-3 shadow-2xs">
+              <span class="material-symbols-outlined text-[24px] text-emerald-700 shrink-0 mt-0.5">verified_user</span>
+              <div class="space-y-1 text-xs text-emerald-950">
+                <div class="font-bold text-emerald-900 text-sm">Mode Toko Cabang Aktif</div>
+                <p class="text-emerald-800 text-[11px] leading-relaxed">
+                  Komputer ini menggunakan <strong>database master dari Toko Pusat</strong>. Semua katalog produk, kategori, dan harga diatur terpusat agar tidak campur aduk. Toko Cabang tidak bisa membuat cabang baru, melainkan hanya bertugas menerima data dan bertransaksi.
+                </p>
+              </div>
+            </div>
+
+            <!-- Langkah 1: Pilih Identitas Cabang Ini -->
+            <div class="p-4 bg-white border border-slate-200 rounded-2xl shadow-2xs space-y-3">
+              <div class="flex items-center justify-between">
+                <div>
+                  <div class="font-bold text-slate-900 text-xs flex items-center gap-2">
+                    <span class="w-5 h-5 rounded-full bg-emerald-600 text-white text-[11px] font-bold flex items-center justify-center">1</span>
+                    <span>Identitas Cabang Ini</span>
+                  </div>
+                  <p class="text-[11px] text-slate-500 mt-0.5">
+                    Pilih nama cabang yang telah didaftarkan oleh Toko Pusat.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onclick={handleMuatCabangCloud}
+                  disabled={isLoadingCloudCabang}
+                  class="flex items-center gap-1 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold border border-slate-300 cursor-pointer"
+                >
+                  <span class="material-symbols-outlined text-[14px] {isLoadingCloudCabang ? 'animate-spin' : ''}">refresh</span>
+                  <span>Muat Cabang dari Cloud</span>
+                </button>
+              </div>
+
+              <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-1">
+                <select
+                  value={selectedCabangId}
+                  onchange={(e) => handlePilihCabang((e.target as HTMLSelectElement).value)}
+                  class="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-xs font-medium bg-white focus:ring-1 focus:ring-emerald-500 outline-hidden"
+                >
+                  {#if networkConfig?.daftar_cabang}
+                    {#each networkConfig.daftar_cabang as c}
+                      <option value={c.id}>
+                        {c.nama} ({c.kode}) {c.is_pusat ? "- Toko Pusat" : ""}
+                      </option>
+                    {/each}
+                  {/if}
+                  {#if cloudCabangList.length > 0}
+                    {#each cloudCabangList as cc}
+                      {#if !networkConfig?.daftar_cabang?.some((x) => x.id === cc.id)}
+                        <option value={cc.id}>
+                          {cc.nama} ({cc.kode}) - Dari Cloud
+                        </option>
+                      {/if}
+                    {/each}
+                  {/if}
+                </select>
+
+                <div class="px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-lg text-emerald-800 font-bold text-xs shrink-0 flex items-center gap-1.5">
+                  <span class="material-symbols-outlined text-[16px]">check_circle</span>
+                  <span>Cabang Terpilih: {networkConfig?.cabang_nama || "Pusat"}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Langkah 2: Ambil & Sinkronkan Data Produk dari Pusat -->
+            <div class="p-4 bg-white border border-slate-200 rounded-2xl shadow-2xs space-y-3">
               <div>
                 <div class="font-bold text-slate-900 text-xs flex items-center gap-2">
-                  <span>Sinkronisasi Cloud Supabase (Online Multi-Cabang)</span>
-                  <span class="px-2 py-0.5 rounded text-[10px] font-bold font-mono {supabaseConfig.is_bound ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' : 'bg-slate-200 text-slate-600'}">
-                    {supabaseConfig.is_bound ? "TERHUBUNG" : "BELUM DITAUTKAN"}
-                  </span>
+                  <span class="w-5 h-5 rounded-full bg-emerald-600 text-white text-[11px] font-bold flex items-center justify-center">2</span>
+                  <span>Tarik Data Master Produk dari Pusat</span>
                 </div>
-                <p class="text-[11px] text-slate-600 mt-0.5">
-                  Hubungkan database PostgreSQL Supabase untuk menyinkronkan transaksi &amp; katalog produk antar cabang secara online.
+                <p class="text-[11px] text-slate-500 mt-0.5">
+                  Pilih cara menghubungkan toko ini ke Pusat (Wi-Fi lokal jika satu gedung, atau Cloud jika beda kota/ruko).
                 </p>
               </div>
-            </div>
-            <button
-              type="button"
-              onclick={() => {
-                activeTab = "supabase";
-                loadSupabaseConfig();
-              }}
-              class="px-3 py-1.5 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer border-none shadow-xs transition-all shrink-0"
-            >
-              <span>Buka Pengaturan Supabase</span>
-              <span class="material-symbols-outlined text-[15px]">arrow_forward</span>
-            </button>
-          </div>
 
-          <!-- Section A: Mode Peran Terminal Ini -->
-          <div
-            class="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3"
-          >
-            <div class="flex items-center justify-between">
-              <span
-                class="font-bold text-slate-800 text-xs flex items-center gap-1.5"
-              >
-                <span class="material-symbols-outlined text-[16px] text-primary"
-                  >dns</span
+              <!-- Pilihan Jalur Koneksi: Wi-Fi vs Cloud -->
+              <div class="flex border-b border-slate-200 text-xs">
+                <button
+                  type="button"
+                  onclick={() => (cabangSyncTab = "wifi")}
+                  class="px-4 py-2 font-bold cursor-pointer border-b-2 flex items-center gap-1.5 {cabangSyncTab === 'wifi' ? 'border-primary text-primary' : 'border-transparent text-slate-500 hover:text-slate-800'}"
                 >
-                Peran Node Terminal Kasir Ini (Local Node)
-              </span>
-              <span
-                class="px-2 py-0.5 rounded text-[10px] font-bold font-mono {networkConfig?.device_role ===
-                'server'
-                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                  : 'bg-blue-100 text-blue-800 border border-blue-200'}"
-              >
-                {networkConfig?.device_role === "server"
-                  ? "MASTER SERVER"
-                  : "SLAVE CLIENT"}
-              </span>
-            </div>
+                  <span class="material-symbols-outlined text-[16px]">wifi</span>
+                  <span>📶 Melalui Wi-Fi Toko (Satu Gedung)</span>
+                </button>
 
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <!-- Mode Server -->
-              <label
-                class="p-3 bg-white border rounded-xl cursor-pointer flex items-start gap-3 transition-all {networkConfig?.device_role ===
-                'server'
-                  ? 'border-primary ring-1 ring-primary bg-sky-50/40'
-                  : 'border-slate-200 hover:border-slate-300'}"
-              >
-                <input
-                  type="radio"
-                  name="device_role"
-                  value="server"
-                  checked={networkConfig?.device_role === "server"}
-                  onchange={() => {
-                    if (networkConfig) networkConfig.device_role = "server";
-                  }}
-                  class="mt-1 text-primary focus:ring-primary cursor-pointer"
-                />
-                <div>
-                  <div
-                    class="font-bold text-slate-900 text-xs flex items-center gap-1"
-                  >
-                    <span>Server Utama (Master POS)</span>
-                    <span
-                      class="px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-100 text-emerald-800"
-                      >PORT 7890</span
+                <button
+                  type="button"
+                  onclick={() => (cabangSyncTab = "cloud")}
+                  class="px-4 py-2 font-bold cursor-pointer border-b-2 flex items-center gap-1.5 {cabangSyncTab === 'cloud' ? 'border-sky-600 text-sky-600' : 'border-transparent text-slate-500 hover:text-slate-800'}"
+                >
+                  <span class="material-symbols-outlined text-[16px]">cloud_sync</span>
+                  <span>☁️ Melalui Cloud Internet (Luar Kota / Beda Lokasi)</span>
+                </button>
+              </div>
+
+              {#if cabangSyncTab === "wifi"}
+                <div class="p-3 bg-slate-50 rounded-xl space-y-3 text-xs">
+                  <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div class="space-y-1">
+                      <span class="font-bold text-slate-700">Alamat IP Komputer Server Pusat:</span>
+                      <input
+                        type="text"
+                        bind:value={manualServerIp}
+                        placeholder="Contoh: 192.168.100.75"
+                        class="w-full sm:w-64 px-3 py-1.5 border border-slate-300 rounded-lg text-xs font-mono bg-white outline-hidden"
+                      />
+                    </div>
+
+                    <button
+                      type="button"
+                      onclick={() => handleTarikMasterLan(manualServerIp)}
+                      disabled={isPullingMaster}
+                      class="px-4 py-2 bg-primary hover:bg-primary-dark disabled:opacity-50 text-white rounded-lg font-bold text-xs cursor-pointer border-none shadow-xs flex items-center gap-1.5 self-start sm:self-end"
                     >
+                      {#if isPullingMaster}
+                        <span class="material-symbols-outlined text-[16px] animate-spin">progress_activity</span>
+                        <span>Menarik Data...</span>
+                      {:else}
+                        <span class="material-symbols-outlined text-[16px]">download</span>
+                        <span>Tarik Data via Wi-Fi</span>
+                      {/if}
+                    </button>
                   </div>
-                  <p class="text-[11px] text-slate-500 mt-1 leading-normal">
-                    Komputer ini menyimpan database SQLite lokal dan membuka
-                    service HTTP Axum untuk melayani terminal kasir client lain
-                    di jaringan LAN toko.
-                  </p>
                 </div>
-              </label>
-
-              <!-- Mode Client -->
-              <label
-                class="p-3 bg-white border rounded-xl cursor-pointer flex items-start gap-3 transition-all {networkConfig?.device_role ===
-                'client'
-                  ? 'border-primary ring-1 ring-primary bg-sky-50/40'
-                  : 'border-slate-200 hover:border-slate-300'}"
-              >
-                <input
-                  type="radio"
-                  name="device_role"
-                  value="client"
-                  checked={networkConfig?.device_role === "client"}
-                  onchange={() => {
-                    if (networkConfig) networkConfig.device_role = "client";
-                  }}
-                  class="mt-1 text-primary focus:ring-primary cursor-pointer"
-                />
-                <div>
-                  <div class="font-bold text-slate-900 text-xs">
-                    Client Terminal (Slave POS)
-                  </div>
-                  <p class="text-[11px] text-slate-500 mt-1 leading-normal">
-                    Komputer ini mengirim transaksi scan dan checkout ke IP
-                    Server Utama melalui protokol LAN Axum.
-                  </p>
-                </div>
-              </label>
-            </div>
-
-            <!-- Detail Koneksi -->
-            <div
-              class="pt-3 border-t border-slate-200 grid grid-cols-1 sm:grid-cols-3 gap-3"
-            >
-              <div>
-                <span class="block font-semibold text-slate-600 text-[11px]"
-                  >Hardware Machine ID:</span
-                >
-                <span class="font-mono font-bold text-slate-900 text-xs"
-                  >{networkConfig?.machine_id || "MACHINE-LOCAL-01"}</span
-                >
-              </div>
-              <div>
-                <span class="block font-semibold text-slate-600 text-[11px]"
-                  >Service Port LAN:</span
-                >
-                <span class="font-mono font-bold text-emerald-700 text-xs"
-                  >Port 8080 (REST / Ping)</span
-                >
-              </div>
-              <div>
-                <span class="block font-semibold text-slate-600 text-[11px]"
-                  >Koneksi Server Host:</span
-                >
-                <span class="font-mono font-bold text-slate-900 text-xs"
-                  >{networkConfig?.server_ip || "192.168.1.100"}:8080</span
-                >
-              </div>
-            </div>
-          </div>
-
-          <!-- Section B: Daftar Terminal Device Kasir -->
-          <div
-            class="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3"
-          >
-            <div class="flex items-center justify-between">
-              <div>
-                <div
-                  class="font-bold text-slate-800 text-xs flex items-center gap-1.5"
-                >
-                  <span
-                    class="material-symbols-outlined text-[16px] text-primary"
-                    >devices</span
-                  >
-                  Daftar Terminal Kasir Terhubung di Toko
-                </div>
-                <div class="text-slate-500 text-[10px]">
-                  Terminal kasir yang terdaftar untuk cabang {networkConfig?.cabang_nama ||
-                    "Utama"}.
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onclick={() => (isAddDeviceOpen = true)}
-                class="flex items-center gap-1 px-3 py-1.5 bg-primary hover:bg-primary-dark text-white rounded-lg text-xs font-bold shadow-2xs cursor-pointer border-none transition-all"
-              >
-                <span class="material-symbols-outlined text-[15px]">add</span>
-                <span>Tambah Terminal</span>
-              </button>
-            </div>
-
-            <div
-              class="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-2xs"
-            >
-              <table class="w-full text-left border-collapse text-xs">
-                <thead>
-                  <tr
-                    class="bg-slate-100 border-b border-slate-200 text-slate-700 font-bold uppercase tracking-wider text-[10px]"
-                  >
-                    <th class="py-2 px-3">Kode Device</th>
-                    <th class="py-2 px-3">Nama Terminal</th>
-                    <th class="py-2 px-3">Peran (Role)</th>
-                    <th class="py-2 px-3">IP Address</th>
-                    <th class="py-2 px-3 text-center">Status</th>
-                  </tr>
-                </thead>
-                <tbody class="divide-y divide-slate-100">
-                  {#if !networkConfig?.daftar_device || networkConfig.daftar_device.length === 0}
-                    <tr>
-                      <td colspan="5" class="py-4 text-center text-slate-400"
-                        >Belum ada terminal kasir lain yang terdaftar.</td
-                      >
-                    </tr>
-                  {:else}
-                    {#each networkConfig.daftar_device as d}
-                      <tr class="hover:bg-slate-50">
-                        <td class="py-2 px-3 font-mono font-bold text-slate-900"
-                          >{d.kode}</td
-                        >
-                        <td class="py-2 px-3 font-semibold text-slate-800"
-                          >{d.nama}</td
-                        >
-                        <td class="py-2 px-3">
-                          <span
-                            class="px-2 py-0.5 rounded text-[10px] font-bold font-mono uppercase {d.role ===
-                            'server'
-                              ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                              : 'bg-blue-100 text-blue-800 border border-blue-200'}"
-                          >
-                            {d.role}
-                          </span>
-                        </td>
-                        <td class="py-2 px-3 font-mono text-slate-600"
-                          >{d.ip_address || "DHCP / Auto"}</td
-                        >
-                        <td class="py-2 px-3 text-center">
-                          <span
-                            class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 text-[10px] font-bold"
-                          >
-                            <span
-                              class="w-1.5 h-1.5 rounded-full bg-emerald-500"
-                            ></span> Aktif
-                          </span>
-                        </td>
-                      </tr>
-                    {/each}
-                  {/if}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <!-- Section C: Multi-Cabang (Outlets) -->
-          <div
-            class="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3"
-          >
-            <div class="flex items-center justify-between">
-              <div>
-                <div
-                  class="font-bold text-slate-800 text-xs flex items-center gap-1.5"
-                >
-                  <span
-                    class="material-symbols-outlined text-[16px] text-primary"
-                    >store</span
-                  >
-                  Manajemen Multi-Cabang (Outlets)
-                </div>
-                <div class="text-slate-500 text-[10px]">
-                  Daftar cabang/toko cabang yang terintegrasi dengan
-                  sinkronisasi data outbox.
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onclick={() => (isAddCabangOpen = true)}
-                class="flex items-center gap-1 px-3 py-1.5 bg-primary hover:bg-primary-dark text-white rounded-lg text-xs font-bold shadow-2xs cursor-pointer border-none transition-all"
-              >
-                <span class="material-symbols-outlined text-[15px]"
-                  >add_business</span
-                >
-                <span>Tambah Cabang</span>
-              </button>
-            </div>
-
-            <div
-              class="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-2xs"
-            >
-              <table class="w-full text-left border-collapse text-xs">
-                <thead>
-                  <tr
-                    class="bg-slate-100 border-b border-slate-200 text-slate-700 font-bold uppercase tracking-wider text-[10px]"
-                  >
-                    <th class="py-2 px-3">Kode Cabang</th>
-                    <th class="py-2 px-3">Nama Cabang</th>
-                    <th class="py-2 px-3">Tipe</th>
-                    <th class="py-2 px-3">Alamat</th>
-                    <th class="py-2 px-3 text-center">Sinkronisasi Outbox</th>
-                  </tr>
-                </thead>
-                <tbody class="divide-y divide-slate-100">
-                  {#if !networkConfig?.daftar_cabang || networkConfig.daftar_cabang.length === 0}
-                    <tr>
-                      <td colspan="5" class="py-4 text-center text-slate-400"
-                        >Memuat daftar cabang...</td
-                      >
-                    </tr>
-                  {:else}
-                    {#each networkConfig.daftar_cabang as c}
-                      <tr class="hover:bg-slate-50">
-                        <td class="py-2 px-3 font-mono font-bold text-slate-900"
-                          >{c.kode}</td
-                        >
-                        <td class="py-2 px-3 font-semibold text-slate-800"
-                          >{c.nama}</td
-                        >
-                        <td class="py-2 px-3">
-                          {#if c.is_pusat}
-                            <span
-                              class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300 uppercase"
-                              >PUSAT</span
-                            >
-                          {:else}
-                            <span
-                              class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-300 uppercase"
-                              >OUTLET</span
-                            >
-                          {/if}
-                        </td>
-                        <td class="py-2 px-3 text-slate-600 truncate max-w-xs"
-                          >{c.alamat || "-"}</td
-                        >
-                        <td class="py-2 px-3 text-center">
-                          <span
-                            class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-100 text-emerald-800"
-                          >
-                            {c.sync_status || "SYNCED"}
-                          </span>
-                        </td>
-                      </tr>
-                    {/each}
-                  {/if}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <!-- Section D: Perangkat LAN Terdeteksi Otomatis (UDP Discovery) -->
-          <div
-            class="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3"
-          >
-            <div class="flex items-center justify-between">
-              <div>
-                <div
-                  class="font-bold text-slate-800 text-xs flex items-center gap-1.5"
-                >
-                  <span
-                    class="material-symbols-outlined text-[16px] text-primary"
-                    >sensors</span
-                  >
-                  <span
-                    >Perangkat LAN Terdeteksi Otomatis (UDP Broadcast :7891)</span
-                  >
-                  <span
-                    class="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-primary/10 text-primary"
-                  >
-                    {discoveredDevices.length} terdeteksi
-                  </span>
-                </div>
-                <div class="text-slate-500 text-[10px]">
-                  Semua terminal kasir FAZPOS di jaringan WiFi/LAN yang sama
-                  akan otomatis terdeteksi tanpa setup manual.
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onclick={loadLanDevices}
-                class="flex items-center gap-1 px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-700 rounded-lg text-xs font-semibold border border-slate-300 shadow-2xs cursor-pointer transition-all"
-              >
-                <span
-                  class="material-symbols-outlined text-[15px] {isScanningLan
-                    ? 'animate-spin'
-                    : ''}">refresh</span
-                >
-                <span>Pindai Ulang</span>
-              </button>
-            </div>
-
-            {#if discoveredDevices.length === 0}
-              <div
-                class="p-6 bg-white border border-dashed border-slate-300 rounded-xl text-center space-y-2"
-              >
-                <span
-                  class="material-symbols-outlined text-[32px] text-slate-400"
-                  >wifi_find</span
-                >
-                <p class="text-xs text-slate-600 font-medium">
-                  Belum ada perangkat FAZPOS lain yang terdeteksi di jaringan
-                  LAN ini.
-                </p>
-                <p class="text-[11px] text-slate-400">
-                  Pastikan perangkat lain sudah membuka FAZPOS dan terhubung ke
-                  WiFi / Switch yang sama.
-                </p>
-              </div>
-            {:else}
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {#each discoveredDevices as dev}
-                  <div
-                    class="p-3 bg-white border rounded-xl shadow-2xs space-y-2 {dev.is_online
-                      ? 'border-emerald-200 bg-emerald-50/20'
-                      : 'border-slate-200 opacity-75'}"
-                  >
-                    <div class="flex items-center justify-between">
-                      <div class="flex items-center gap-2">
-                        <span
-                          class="w-2.5 h-2.5 rounded-full {dev.is_online
-                            ? 'bg-emerald-500 animate-pulse'
-                            : 'bg-slate-400'}"
-                        ></span>
-                        <span class="font-bold text-slate-900 text-xs"
-                          >{dev.device_nama}</span
-                        >
-                        <span
-                          class="px-1.5 py-0.2 rounded text-[9px] font-bold uppercase {dev.role ===
-                          'server'
-                            ? 'bg-emerald-100 text-emerald-800'
-                            : 'bg-blue-100 text-blue-800'}"
-                        >
-                          {dev.role}
-                        </span>
-                      </div>
-                      <span
-                        class="px-2 py-0.5 rounded text-[10px] font-mono font-bold {dev.license_status ===
-                        'AKTIF'
-                          ? 'bg-emerald-100 text-emerald-700'
-                          : 'bg-amber-100 text-amber-800'}"
-                      >
-                        {dev.license_status === "AKTIF"
-                          ? "LISENSI AKTIF"
-                          : "BELUM AKTIF"}
+              {:else}
+                <div class="p-3 bg-sky-50/60 border border-sky-200 rounded-xl space-y-3 text-xs">
+                  <div class="flex items-center justify-between">
+                    <div>
+                      <span class="font-bold text-sky-900 block">Koneksi Cloud Supabase:</span>
+                      <span class="text-[11px] text-sky-700">
+                        {supabaseConfig.is_bound ? `Terhubung ke Cloud (${supabaseConfig.url})` : "Belum terhubung ke Cloud. Silakan atur di tab Cloud Supabase."}
                       </span>
                     </div>
 
-                    <div class="text-[11px] text-slate-600 space-y-0.5">
-                      <div class="flex justify-between">
-                        <span class="text-slate-400">Alamat IP &amp; Port:</span
-                        >
-                        <span class="font-mono font-bold text-slate-800"
-                          >{dev.ip_address}:{dev.port}</span
-                        >
-                      </div>
-                      <div class="flex justify-between">
-                        <span class="text-slate-400">Cabang:</span>
-                        <span class="font-medium text-slate-800"
-                          >{dev.cabang_nama} ({dev.cabang_id})</span
-                        >
-                      </div>
-                      <div class="flex justify-between">
-                        <span class="text-slate-400">Machine ID:</span>
-                        <span class="font-mono text-[10px] text-slate-500"
-                          >{dev.machine_id}</span
-                        >
-                      </div>
-                      {#if pingResults[dev.device_id]}
-                        <div
-                          class="flex justify-between pt-1 border-t border-slate-100 text-[10px]"
-                        >
-                          <span class="text-slate-400">Status Ping:</span>
-                          <span
-                            class="font-bold {pingResults[dev.device_id].sukses
-                              ? 'text-emerald-600'
-                              : 'text-rose-600'}"
-                          >
-                            {pingResults[dev.device_id].latency_ms} ms • {pingResults[
-                              dev.device_id
-                            ].sukses
-                              ? "Online"
-                              : "Gagal"}
-                          </span>
-                        </div>
-                      {/if}
-                    </div>
-
-                    <div
-                      class="pt-2 border-t border-slate-100 flex items-center gap-2"
+                    <button
+                      type="button"
+                      onclick={handleTarikMasterCloud}
+                      disabled={isPullingMaster || !supabaseConfig.is_bound}
+                      class="px-4 py-2 bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white rounded-lg font-bold text-xs cursor-pointer border-none shadow-xs flex items-center gap-1.5"
                     >
-                      <button
-                        type="button"
-                        onclick={() => handlePingLan(dev)}
-                        class="flex-1 py-1 px-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-[11px] font-semibold flex items-center justify-center gap-1 cursor-pointer border border-slate-200 transition-all"
-                      >
-                        <span class="material-symbols-outlined text-[13px]"
-                          >network_ping</span
-                        >
-                        <span>Tes Ping</span>
-                      </button>
-
-                      {#if dev.role === "server" && networkConfig?.device_role === "client"}
-                        <button
-                          type="button"
-                          onclick={() => handleGabungServer(dev)}
-                          class="flex-1 py-1 px-2 bg-primary hover:bg-primary-dark text-white rounded text-[11px] font-semibold flex items-center justify-center gap-1 cursor-pointer border-none shadow-2xs transition-all"
-                        >
-                          <span class="material-symbols-outlined text-[13px]"
-                            >link</span
-                          >
-                          <span>Gabung Server</span>
-                        </button>
+                      {#if isPullingMaster}
+                        <span class="material-symbols-outlined text-[16px] animate-spin">progress_activity</span>
+                        <span>Menarik Data dari Cloud...</span>
+                      {:else}
+                        <span class="material-symbols-outlined text-[16px]">cloud_download</span>
+                        <span>📥 Tarik &amp; Sinkronkan Data dari Cloud</span>
                       {/if}
-                    </div>
+                    </button>
                   </div>
-                {/each}
-              </div>
-            {/if}
-          </div>
+                </div>
+              {/if}
+            </div>
 
-          <!-- Bottom Action Simpan Jaringan -->
-          <div
-            class="pt-4 border-t border-slate-200 flex items-center justify-between"
-          >
-            <span class="text-[11px] text-slate-500 font-medium"
-              >Peran node server/client dan daftar terminal kasir disimpan ke
-              database lokal.</span
-            >
-            <button
-              type="button"
-              onclick={() => {
-                showToast(
-                  "Konfigurasi jaringan & multi-cabang berhasil disimpan!",
-                );
-              }}
-              class="flex items-center gap-1.5 px-4 py-2 bg-primary hover:bg-primary-dark text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer border-none transition-all"
-            >
-              <span class="material-symbols-outlined text-[16px]">save</span>
-              <span>Simpan Pengaturan Jaringan &amp; Cabang</span>
-            </button>
-          </div>
+            <!-- Langkah 3: Status Database Lokal & Siap Jualan Offline -->
+            <div class="p-4 bg-white border border-slate-200 rounded-2xl shadow-2xs space-y-3">
+              <div class="font-bold text-slate-900 text-xs flex items-center gap-2">
+                <span class="w-5 h-5 rounded-full bg-emerald-600 text-white text-[11px] font-bold flex items-center justify-center">3</span>
+                <span>Status Database Lokal (100% Offline-Ready)</span>
+              </div>
+
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl flex items-center gap-3">
+                  <div class="w-10 h-10 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0">
+                    <span class="material-symbols-outlined text-[22px]">inventory_2</span>
+                  </div>
+                  <div>
+                    <div class="font-bold text-slate-900 text-sm">
+                      {networkConfig?.total_produk_lokal || 0} Produk
+                    </div>
+                    <p class="text-[11px] text-slate-500">Tersimpan di database komputer ini</p>
+                  </div>
+                </div>
+
+                <div class="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center gap-3">
+                  <div class="w-10 h-10 rounded-lg bg-emerald-600 text-white flex items-center justify-center shrink-0">
+                    <span class="material-symbols-outlined text-[22px]">wifi_off</span>
+                  </div>
+                  <div>
+                    <div class="font-bold text-emerald-900 text-sm">Siap Transaksi Offline</div>
+                    <p class="text-[11px] text-emerald-700">Kasir tetap lancar mencetak struk walau internet mati</p>
+                  </div>
+                </div>
+              </div>
+
+              <div class="pt-2 border-t border-slate-100 flex items-center justify-between">
+                <span class="text-[11px] text-slate-500 font-medium">
+                  Kirim transaksi yang belum tersinkronkan ke Toko Pusat:
+                </span>
+                <button
+                  type="button"
+                  onclick={handleSyncSupabaseNow}
+                  disabled={isSyncingSupabase}
+                  class="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold cursor-pointer border-none shadow-xs flex items-center gap-1.5"
+                >
+                  <span class="material-symbols-outlined text-[15px]">sync</span>
+                  <span>Kirim Transaksi ke Pusat Sekarang</span>
+                </button>
+              </div>
+            </div>
+          {/if}
         </div>
       {:else if activeTab === "supabase"}
         <div class="max-w-4xl flex flex-col gap-5">
@@ -3560,6 +3579,116 @@
             >
               <span class="material-symbols-outlined text-[16px]">save</span>
               <span>Simpan Cabang</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  {/if}
+
+  <!-- Modal Sambung Manual via IP Server -->
+  {#if isManualConnectOpen}
+    <div
+      class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4 select-none"
+      role="dialog"
+      aria-modal="true"
+      tabindex="-1"
+      onkeydown={(e) => e.key === "Escape" && (isManualConnectOpen = false)}
+    >
+      <div
+        class="bg-white border border-slate-300 rounded-2xl shadow-xl w-full max-w-md flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150 text-slate-800 font-sans"
+      >
+        <!-- Modal Header -->
+        <div
+          class="px-5 py-3.5 bg-slate-100 border-b border-slate-200 flex items-center justify-between shrink-0"
+        >
+          <div class="flex items-center gap-2.5">
+            <div
+              class="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center border border-primary/20"
+            >
+              <span class="material-symbols-outlined text-[20px]">lan</span>
+            </div>
+            <div>
+              <h3 class="font-bold text-slate-900 text-sm">
+                Sambung Manual ke Server
+              </h3>
+              <p class="text-[11px] text-slate-500">
+                Sambung langsung menggunakan alamat IP Master Server
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onclick={() => (isManualConnectOpen = false)}
+            class="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-200 cursor-pointer border-none bg-transparent"
+          >
+            <span class="material-symbols-outlined text-[20px]">close</span>
+          </button>
+        </div>
+
+        <!-- Modal Body -->
+        <form
+          onsubmit={(e) => {
+            e.preventDefault();
+            handleManualConnect();
+          }}
+          class="p-5 space-y-4 text-xs"
+        >
+          <div class="p-3 bg-blue-50/60 border border-blue-200 rounded-lg text-blue-900 text-[11px] flex items-start gap-2">
+            <span class="material-symbols-outlined text-[16px] text-blue-600 shrink-0 mt-0.5">info</span>
+            <span>
+              Masukkan alamat IP komputer yang bertindak sebagai <strong>Master Server</strong> (contoh: <code>192.168.100.75</code>). Alamat IP ini dapat dilihat di layar FAZPOS komputer server.
+            </span>
+          </div>
+
+          <div class="space-y-1.5">
+            <label for="manual-ip" class="font-bold text-slate-700 block">
+              Alamat IP Master Server <span class="text-rose-500">*</span>
+            </label>
+            <input
+              id="manual-ip"
+              type="text"
+              bind:value={manualServerIp}
+              placeholder="Contoh: 192.168.100.75"
+              class="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-mono focus:ring-1 focus:ring-primary focus:border-primary outline-hidden"
+              required
+            />
+          </div>
+
+          <div class="space-y-1.5">
+            <label for="manual-port" class="font-bold text-slate-700 block">
+              Port Server (Default: 7890)
+            </label>
+            <input
+              id="manual-port"
+              type="number"
+              bind:value={manualServerPort}
+              placeholder="7890"
+              class="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-mono focus:ring-1 focus:ring-primary focus:border-primary outline-hidden"
+            />
+          </div>
+
+          <!-- Modal Footer -->
+          <div class="pt-3 border-t border-slate-200 flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onclick={() => (isManualConnectOpen = false)}
+              class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-bold text-xs cursor-pointer border border-slate-300"
+            >
+              Batal
+            </button>
+            <button
+              type="submit"
+              disabled={isConnectingManual}
+              class="px-4 py-2 bg-primary hover:bg-primary-dark disabled:opacity-50 text-white rounded-lg font-bold text-xs cursor-pointer border-none shadow-xs flex items-center gap-1.5"
+            >
+              {#if isConnectingManual}
+                <span class="material-symbols-outlined text-[16px] animate-spin">progress_activity</span>
+                <span>Menghubungkan...</span>
+              {:else}
+                <span class="material-symbols-outlined text-[16px]">link</span>
+                <span>Hubungkan Sekarang</span>
+              {/if}
             </button>
           </div>
         </form>

@@ -186,6 +186,182 @@ impl SupabaseClient {
         }
     }
 
+    /// Tarik data dari endpoint PostgREST Supabase
+    pub async fn pull_records(
+        url: &str,
+        key: &str,
+        table: &str,
+        query: &str,
+    ) -> Result<serde_json::Value, String> {
+        let base_url = Self::normalize_url(url);
+        let endpoint = if query.is_empty() {
+            format!("{}/rest/v1/{}", base_url, table)
+        } else {
+            format!("{}/rest/v1/{}?{}", base_url, table, query)
+        };
+
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "apikey",
+            HeaderValue::from_str(key).map_err(|e| e.to_string())?,
+        );
+        let auth_val = format!("Bearer {}", key);
+        headers.insert(
+            AUTHORIZATION,
+            HeaderValue::from_str(&auth_val).map_err(|e| e.to_string())?,
+        );
+        headers.insert(
+            "accept",
+            HeaderValue::from_static("application/json"),
+        );
+
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(20))
+            .build()
+            .map_err(|e| e.to_string())?;
+
+        let resp = client
+            .get(&endpoint)
+            .headers(headers)
+            .send()
+            .await
+            .map_err(|e| format!("Gagal ambil data dari {}: {}", table, e))?;
+
+        if resp.status().is_success() {
+            let json_val = resp.json::<serde_json::Value>().await.map_err(|e| e.to_string())?;
+            Ok(json_val)
+        } else {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            Err(format!("HTTP {} pada tabel {}: {}", status, table, body))
+        }
+    }
+
+    /// Ambil daftar cabang dari Supabase
+    pub async fn pull_cabang_list(url: &str, key: &str) -> Result<Vec<serde_json::Value>, String> {
+        let val = Self::pull_records(url, key, "cabang", "select=*&order=created_at.asc").await?;
+        if let Some(arr) = val.as_array() {
+            Ok(arr.clone())
+        } else {
+            Ok(Vec::new())
+        }
+    }
+
+    /// Push cabang baru ke Supabase Cloud
+    pub async fn push_cabang_to_cloud(
+        url: &str,
+        key: &str,
+        c: &crate::domain::cabang::Cabang,
+    ) -> Result<(), String> {
+        let payload = serde_json::json!([{
+            "id": c.id,
+            "kode": c.kode,
+            "nama": c.nama,
+            "alamat": c.alamat,
+            "telepon": c.telepon,
+            "is_pusat": c.is_pusat,
+            "updated_at": chrono::Utc::now().to_rfc3339()
+        }]);
+        Self::push_records(url, key, "cabang", &payload).await
+    }
+
+    /// Tarik master produk & pelanggan dari Supabase Cloud dan simpan ke SQLite lokal
+    pub async fn pull_master_catalog(
+        url: &str,
+        key: &str,
+        db_arc: &Arc<Mutex<Database>>,
+        target_cabang_id: &str,
+    ) -> Result<u32, String> {
+        // 1. Ambil semua data via HTTP dari Supabase tanpa menyentuh DB SQLite
+        let cabang_list = Self::pull_cabang_list(url, key).await.unwrap_or_default();
+        let goods_val = Self::pull_records(url, key, "dbarang", "select=*").await?;
+        let goods_arr = goods_val.as_array().cloned().unwrap_or_default();
+        let cust_arr = match Self::pull_records(url, key, "dpelanggan", "select=*").await {
+            Ok(v) => v.as_array().cloned().unwrap_or_default(),
+            Err(_) => Vec::new(),
+        };
+
+        // 2. Simpan secara sinkronus ke DB SQLite dalam 1 blok lock cepat tanpa ada .await
+        let mut total_imported = 0u32;
+        {
+            let db = db_arc.lock().map_err(|e| e.to_string())?;
+            let conn = db.conn();
+
+            let c_repo = crate::repository::cabang_repo::CabangRepo::new(conn);
+            for c_val in &cabang_list {
+                if let (Some(id), Some(kode), Some(nama)) = (
+                    c_val.get("id").and_then(|v| v.as_str()),
+                    c_val.get("kode").and_then(|v| v.as_str()),
+                    c_val.get("nama").and_then(|v| v.as_str()),
+                ) {
+                    let is_pusat = c_val.get("is_pusat").and_then(|v| v.as_bool()).unwrap_or(false);
+                    let mut c = crate::domain::cabang::Cabang::baru(kode, nama, is_pusat);
+                    c.id = id.to_string();
+                    c.alamat = c_val.get("alamat").and_then(|v| v.as_str()).map(|s| s.to_string());
+                    c.telepon = c_val.get("telepon").and_then(|v| v.as_str()).map(|s| s.to_string());
+                    let _ = c_repo.simpan_cabang(&c);
+                }
+            }
+
+            let b_repo = crate::repository::barang_repo::BarangRepo::new(conn);
+            for g in &goods_arr {
+                if let (Some(kode), Some(nama)) = (
+                    g.get("kode").and_then(|v| v.as_str()),
+                    g.get("nama").and_then(|v| v.as_str()),
+                ) {
+                    let hargapokok = g.get("hargapokok").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                    let hargajual1 = g.get("hargajual1").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                    let stok = g.get("stok").and_then(|v| v.as_f64()).unwrap_or(0.0);
+
+                    let mut b = crate::domain::barang::DBarang::baru(target_cabang_id, kode, nama, hargapokok, hargajual1, stok);
+                    if let Some(id) = g.get("id").and_then(|v| v.as_str()) {
+                        b.id = id.to_string();
+                    }
+                    b.barcode = g.get("barcode").and_then(|v| v.as_str()).map(|s| s.to_string());
+                    b.satuan = g.get("satuan").and_then(|v| v.as_str()).unwrap_or("PCS").to_string();
+                    b.kategori = g.get("kategori").and_then(|v| v.as_str()).map(|s| s.to_string());
+                    b.rak = g.get("rak").and_then(|v| v.as_str()).map(|s| s.to_string());
+                    b.hargajual2 = g.get("hargajual2").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                    b.hargajual3 = g.get("hargajual3").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                    b.hargajual4 = g.get("hargajual4").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                    b.hargapartai = g.get("hargapartai").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                    b.stokminimum = g.get("stokminimum").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                    b.is_aktif = g.get("is_aktif").and_then(|v| v.as_bool()).unwrap_or(true);
+                    b.sync_status = "synced".to_string();
+
+                    if b_repo.simpan(&b).is_ok() {
+                        total_imported += 1;
+                    }
+                }
+            }
+
+            let p_repo = crate::repository::pelanggan_repo::PelangganRepo::new(conn);
+            for c in &cust_arr {
+                if let (Some(kode), Some(nama)) = (
+                    c.get("kode").and_then(|v| v.as_str()),
+                    c.get("nama").and_then(|v| v.as_str()),
+                ) {
+                    let mut p = crate::domain::pelanggan::DPelanggan::baru(target_cabang_id, kode, nama);
+                    if let Some(id) = c.get("id").and_then(|v| v.as_str()) {
+                        p.id = id.to_string();
+                    }
+                    p.alamat = c.get("alamat").and_then(|v| v.as_str()).map(|s| s.to_string());
+                    p.telepon = c.get("telepon").and_then(|v| v.as_str()).map(|s| s.to_string());
+                    p.id_kartu = c.get("id_kartu").and_then(|v| v.as_str()).map(|s| s.to_string());
+                    p.plafonpiutang = c.get("plafonpiutang").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                    p.poin_saldo = c.get("poin_saldo").and_then(|v| v.as_i64()).unwrap_or(0);
+                    p.is_aktif = c.get("is_aktif").and_then(|v| v.as_bool()).unwrap_or(true);
+                    p.sync_status = "synced".to_string();
+                    let _ = p_repo.simpan(&p);
+                }
+            }
+
+            Self::catat_log(conn, "dbarang", total_imported as usize, "sukses", Some("Tarik master produk dari Supabase"), None);
+        }
+
+        Ok(total_imported)
+    }
+
     /// Kumpulkan semua record pending dari SQLite lokal secara sinkronus cepat
     fn kumpulkan_pending(conn: &Connection, cabang_id: &str) -> Result<FullBatchData, String> {
         // 1. Cabang

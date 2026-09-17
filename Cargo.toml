@@ -6,5 +6,5 @@ resolver = "2"
 
 [profile.dev]
 debug = 0
-strip = "debuginfo"
+strip = "none"
 

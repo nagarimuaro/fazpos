@@ -301,6 +301,8 @@ export interface NetworkConfigDTO {
   cabang_nama: string;
   cabang_kode: string;
   is_pusat: boolean;
+  toko_mode?: "pusat" | "cabang";
+  total_produk_lokal?: number;
   device_id: string;
   device_kode: string;
   device_nama: string;
@@ -535,6 +537,23 @@ export const api = {
       server_ip: serverIp,
       server_port: serverPort,
     }),
+  hubungkanLanManual: (ip: string, port?: number) =>
+    invoke<DiscoveredDeviceDTO>("hubungkan_lan_manual", { ip, port }),
+  setTokoMode: (mode: "pusat" | "cabang", cabangId?: string) =>
+    invoke<void>("set_toko_mode", { mode, cabangId, cabang_id: cabangId }),
+  tarikMasterDariPusatLan: (serverIp: string, port?: number) =>
+    invoke<number>("tarik_master_dari_pusat_lan", {
+      serverIp,
+      server_ip: serverIp,
+      port,
+    }),
+  tarikMasterDariSupabase: (targetCabangId?: string) =>
+    invoke<number>("tarik_master_dari_supabase", {
+      targetCabangId,
+      target_cabang_id: targetCabangId,
+    }),
+  getCloudCabangList: (url?: string, key?: string) =>
+    invoke<any[]>("get_cloud_cabang_list", { url, key }),
 
   /* ── Supabase BYO-Cloud Sync ── */
   getSupabaseConfig: () => invoke<SupabaseConfigDTO>("get_supabase_config"),

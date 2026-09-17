@@ -128,6 +128,8 @@ pub struct NetworkConfigDTO {
     pub cabang_nama: String,
     pub cabang_kode: String,
     pub is_pusat: bool,
+    pub toko_mode: String,
+    pub total_produk_lokal: u64,
     pub device_id: String,
     pub device_kode: String,
     pub device_nama: String,
@@ -834,17 +836,28 @@ fn get_network_config(state: State<AppState>) -> Result<NetworkConfigDTO, String
         .map(|v| v == "1" || v == "true")
         .unwrap_or(true);
 
+    let is_pusat = cur_cabang.as_ref().map(|c| c.is_pusat).unwrap_or(true);
+    let toko_mode = conn
+        .query_row("SELECT value FROM app_settings WHERE key = 'toko_mode'", [], |r| r.get(0))
+        .unwrap_or_else(|_| if is_pusat { "pusat".to_string() } else { "cabang".to_string() });
+    let total_produk_lokal: u64 = conn
+        .query_row("SELECT COUNT(*) FROM dbarang WHERE cabang_id = ?", [&state.cabang_id], |r| r.get::<_, i64>(0))
+        .map(|c| c.max(0) as u64)
+        .unwrap_or(0);
+
     Ok(NetworkConfigDTO {
         cabang_id: state.cabang_id.clone(),
         cabang_nama: cur_cabang.as_ref().map(|c| c.nama.clone()).unwrap_or_else(|| "Toko Pusat".to_string()),
         cabang_kode: cur_cabang.as_ref().map(|c| c.kode.clone()).unwrap_or_else(|| "CAB01".to_string()),
-        is_pusat: cur_cabang.as_ref().map(|c| c.is_pusat).unwrap_or(true),
+        is_pusat,
+        toko_mode,
+        total_produk_lokal,
         device_id: state.device_id.clone(),
         device_kode: cur_device.as_ref().map(|d| d.kode.clone()).unwrap_or_else(|| "DEV01".to_string()),
         device_nama: cur_device.as_ref().map(|d| d.nama.clone()).unwrap_or_else(|| "Kasir 1".to_string()),
         device_role: cur_device.as_ref().map(|d| d.role.clone()).unwrap_or_else(|| "server".to_string()),
         machine_id,
-        ip_address: "127.0.0.1".to_string(),
+        ip_address: discovery::ambil_ip_lan_lokal(),
         server_ip,
         lan_port: 7890,
         cloud_url,
@@ -855,22 +868,179 @@ fn get_network_config(state: State<AppState>) -> Result<NetworkConfigDTO, String
 }
 
 #[tauri::command]
-fn simpan_cabang_baru(
-    state: State<AppState>,
+async fn simpan_cabang_baru(
+    state: State<'_, AppState>,
     kode: String,
     nama: String,
     alamat: Option<String>,
     telepon: Option<String>,
     is_pusat: bool,
 ) -> Result<Cabang, String> {
-    let db = state.db.lock().map_err(|e| e.to_string())?;
-    let repo = CabangRepo::new(db.conn());
-
     let mut c = Cabang::baru(kode.trim(), nama.trim(), is_pusat);
     c.alamat = alamat;
     c.telepon = telepon;
-    repo.simpan_cabang(&c).map_err(|e| e.to_string())?;
+
+    let (url, key) = {
+        let db = state.db.lock().map_err(|e| e.to_string())?;
+        let repo = CabangRepo::new(db.conn());
+        repo.simpan_cabang(&c).map_err(|e| e.to_string())?;
+
+        let conn = db.conn();
+        let u: Option<String> = conn.query_row("SELECT value FROM app_settings WHERE key = 'supabase_url'", [], |r| r.get(0)).ok();
+        let k: Option<String> = conn.query_row("SELECT value FROM app_settings WHERE key = 'supabase_api_key'", [], |r| r.get(0)).ok();
+        (u, k)
+    };
+
+    if let (Some(u), Some(k)) = (url, key) {
+        if !u.is_empty() && !k.is_empty() {
+            let _ = SupabaseClient::push_cabang_to_cloud(&u, &k, &c).await;
+        }
+    }
+
     Ok(c)
+}
+
+#[tauri::command]
+fn set_toko_mode(
+    state: State<AppState>,
+    mode: String,
+    cabang_id: Option<String>,
+) -> Result<(), String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let conn = db.conn();
+
+    let is_pusat = mode == "pusat";
+    let role = if is_pusat { "server" } else { "client" };
+
+    let _ = conn.execute(
+        "INSERT OR REPLACE INTO app_settings (key, value) VALUES ('toko_mode', ?)",
+        [&mode],
+    );
+
+    let _ = conn.execute(
+        "UPDATE device SET role = ? WHERE id = ?",
+        rusqlite::params![role, state.device_id],
+    );
+
+    if let Some(cid) = cabang_id {
+        if !cid.is_empty() {
+            let _ = conn.execute(
+                "INSERT OR REPLACE INTO app_settings (key, value) VALUES ('active_cabang_id', ?)",
+                [&cid],
+            );
+            let _ = conn.execute(
+                "UPDATE device SET cabang_id = ? WHERE id = ?",
+                rusqlite::params![cid, state.device_id],
+            );
+        }
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+async fn tarik_master_dari_pusat_lan(
+    state: State<'_, AppState>,
+    server_ip: String,
+    port: Option<u16>,
+) -> Result<u32, String> {
+    let port = port.unwrap_or(7890);
+    let url = format!("http://{}:{}/api/v1/master_sync", server_ip.trim(), port);
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(15))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let resp = client
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("Gagal menghubungi Server Pusat di {}: {}", url, e))?;
+
+    if !resp.status().is_success() {
+        return Err(format!("Server mengembalikan status HTTP {}", resp.status()));
+    }
+
+    let payload = resp
+        .json::<fazpos::lan::server::LanMasterSyncResponse>()
+        .await
+        .map_err(|e| format!("Gagal memproses data dari Server Pusat: {}", e))?;
+
+    let mut total_barang = 0u32;
+    {
+        let db = state.db.lock().map_err(|e| e.to_string())?;
+        let c_repo = CabangRepo::new(db.conn());
+        for c in &payload.cabang_list {
+            let _ = c_repo.simpan_cabang(c);
+        }
+
+        let b_repo = BarangRepo::new(db.conn());
+        for b in &payload.barang_list {
+            let mut local_b = b.clone();
+            local_b.cabang_id = state.cabang_id.clone();
+            local_b.sync_status = "synced".to_string();
+            if b_repo.simpan(&local_b).is_ok() {
+                total_barang += 1;
+            }
+        }
+
+        let p_repo = PelangganRepo::new(db.conn());
+        for p in &payload.pelanggan_list {
+            let mut local_p = p.clone();
+            local_p.cabang_id = state.cabang_id.clone();
+            local_p.sync_status = "synced".to_string();
+            let _ = p_repo.simpan(&local_p);
+        }
+    }
+
+    Ok(total_barang)
+}
+
+#[tauri::command]
+async fn tarik_master_dari_supabase(
+    state: State<'_, AppState>,
+    target_cabang_id: Option<String>,
+) -> Result<u32, String> {
+    let (url, api_key, cabang_id) = {
+        let db = state.db.lock().map_err(|e| e.to_string())?;
+        let conn = db.conn();
+        let u: String = conn.query_row("SELECT value FROM app_settings WHERE key = 'supabase_url'", [], |r| r.get(0)).unwrap_or_default();
+        let k: String = conn.query_row("SELECT value FROM app_settings WHERE key = 'supabase_api_key'", [], |r| r.get(0)).unwrap_or_default();
+        let cid = target_cabang_id.unwrap_or_else(|| state.cabang_id.clone());
+        (u, k, cid)
+    };
+
+    if url.is_empty() || api_key.is_empty() {
+        return Err("URL atau API Key Supabase belum dikonfigurasi. Silakan isi terlebih dahulu.".to_string());
+    }
+
+    SupabaseClient::pull_master_catalog(&url, &api_key, &state.db, &cabang_id).await
+}
+
+#[tauri::command]
+async fn get_cloud_cabang_list(
+    state: State<'_, AppState>,
+    url: Option<String>,
+    key: Option<String>,
+) -> Result<Vec<serde_json::Value>, String> {
+    let (u, k) = {
+        if let (Some(url_val), Some(key_val)) = (url, key) {
+            (url_val, key_val)
+        } else {
+            let db = state.db.lock().map_err(|e| e.to_string())?;
+            let conn = db.conn();
+            let u: String = conn.query_row("SELECT value FROM app_settings WHERE key = 'supabase_url'", [], |r| r.get(0)).unwrap_or_default();
+            let k: String = conn.query_row("SELECT value FROM app_settings WHERE key = 'supabase_api_key'", [], |r| r.get(0)).unwrap_or_default();
+            (u, k)
+        }
+    };
+
+    if u.is_empty() || k.is_empty() {
+        return Err("Konfigurasi Cloud Supabase belum lengkap".to_string());
+    }
+
+    SupabaseClient::pull_cabang_list(&u, &k).await
 }
 
 #[tauri::command]
@@ -942,6 +1112,86 @@ fn gabung_ke_server(state: State<AppState>, server_ip: String, server_port: u16)
         rusqlite::params![server_port.to_string()],
     );
     Ok(())
+}
+
+#[tauri::command]
+async fn hubungkan_lan_manual(
+    state: State<'_, AppState>,
+    ip: String,
+    port: Option<u16>,
+) -> Result<DiscoveredDeviceDTO, String> {
+    let port = port.unwrap_or(7890);
+    let ip_clean = ip.trim().to_string();
+    if ip_clean.is_empty() {
+        return Err("Alamat IP tidak boleh kosong".to_string());
+    }
+
+    let (sukses, latency, text) = discovery::ping_lan_http(&ip_clean, port).await?;
+    if !sukses {
+        return Err(format!("Perangkat di {}:{} tidak merespons", ip_clean, port));
+    }
+
+    #[derive(Deserialize)]
+    struct PingResp {
+        #[serde(default)]
+        cabang_id: String,
+        #[serde(default)]
+        device_id: String,
+        #[serde(default)]
+        role: String,
+        #[serde(default)]
+        versi: String,
+    }
+
+    let parsed: Option<PingResp> = serde_json::from_str(&text).ok();
+    let packet = DiscoveryPacket {
+        app: "fazpos".to_string(),
+        role: parsed.as_ref().map(|p| p.role.clone()).unwrap_or_else(|| "server".to_string()),
+        cabang_id: parsed.as_ref().map(|p| p.cabang_id.clone()).unwrap_or_else(|| "LAN-CABANG".to_string()),
+        cabang_nama: "Server Toko".to_string(),
+        device_id: parsed.as_ref().map(|p| p.device_id.clone()).unwrap_or_else(|| format!("DEV-{}", ip_clean.replace('.', ""))),
+        device_nama: format!("Server ({})", ip_clean),
+        machine_id: format!("MANUAL-{}", ip_clean),
+        license_status: "AKTIF".to_string(),
+        port,
+        ip: ip_clean.clone(),
+        versi: parsed.as_ref().map(|p| p.versi.clone()).unwrap_or_default(),
+    };
+
+    let now = chrono::Utc::now().to_rfc3339();
+    let dev = DiscoveredDevice {
+        packet: packet.clone(),
+        ip_address: ip_clean.clone(),
+        last_seen: now.clone(),
+        latency_ms: Some(latency),
+        is_online: true,
+    };
+
+    if let Ok(mut list) = state.discovered_devices.lock() {
+        if let Some(existing) = list.iter_mut().find(|d| d.ip_address == ip_clean) {
+            existing.last_seen = now.clone();
+            existing.is_online = true;
+            existing.latency_ms = Some(latency);
+        } else {
+            list.push(dev);
+        }
+    }
+
+    Ok(DiscoveredDeviceDTO {
+        device_id: packet.device_id,
+        device_nama: packet.device_nama,
+        cabang_id: packet.cabang_id,
+        cabang_nama: packet.cabang_nama,
+        role: packet.role,
+        ip_address: ip_clean,
+        port,
+        machine_id: packet.machine_id,
+        license_status: packet.license_status,
+        versi: packet.versi,
+        is_online: true,
+        last_seen: now,
+        latency_ms: Some(latency),
+    })
 }
 
 #[tauri::command]
@@ -1955,7 +2205,7 @@ fn main() {
                 machine_id: setup_machine_id,
                 license_status: setup_license_status,
                 port: 7890,
-                ip: "0.0.0.0".to_string(),
+                ip: discovery::ambil_ip_lan_lokal(),
                 versi: env!("CARGO_PKG_VERSION").to_string(),
             };
             tauri::async_runtime::spawn(async move {
@@ -2006,12 +2256,17 @@ fn main() {
             get_discovered_devices,
             ping_lan_device,
             gabung_ke_server,
+            hubungkan_lan_manual,
             get_supabase_config,
             save_supabase_config,
             test_supabase_connection,
             sync_supabase_now,
             get_supabase_sql_ddl,
             get_sync_log,
+            set_toko_mode,
+            tarik_master_dari_pusat_lan,
+            tarik_master_dari_supabase,
+            get_cloud_cabang_list,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

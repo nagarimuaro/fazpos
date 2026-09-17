@@ -20,13 +20,54 @@ pub struct LanServerState {
     pub db: Arc<Mutex<Database>>,
 }
 
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+pub struct LanMasterSyncResponse {
+    pub cabang_list: Vec<crate::domain::cabang::Cabang>,
+    pub barang_list: Vec<crate::domain::barang::DBarang>,
+    pub pelanggan_list: Vec<crate::domain::pelanggan::DPelanggan>,
+}
+
 /// Buat Axum Router untuk melayani komunikasi LAN antar kasir
 pub fn buat_lan_router(state: LanServerState) -> Router {
     Router::new()
         .route("/api/v1/ping", get(handle_ping))
         .route("/api/v1/catalog", get(handle_catalog))
         .route("/api/v1/checkout", post(handle_checkout))
+        .route("/api/v1/cabang", get(handle_cabang))
+        .route("/api/v1/master_sync", get(handle_master_sync))
         .with_state(state)
+}
+
+async fn handle_cabang(State(state): State<LanServerState>) -> (StatusCode, Json<Vec<crate::domain::cabang::Cabang>>) {
+    let db = match state.db.lock() {
+        Ok(guard) => guard,
+        Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(Vec::new())),
+    };
+    let repo = crate::repository::cabang_repo::CabangRepo::new(db.conn());
+    match repo.semua_cabang() {
+        Ok(list) => (StatusCode::OK, Json(list)),
+        Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, Json(Vec::new())),
+    }
+}
+
+async fn handle_master_sync(State(state): State<LanServerState>) -> (StatusCode, Json<Option<LanMasterSyncResponse>>) {
+    let db = match state.db.lock() {
+        Ok(guard) => guard,
+        Err(_) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(None)),
+    };
+    let c_repo = crate::repository::cabang_repo::CabangRepo::new(db.conn());
+    let b_repo = BarangRepo::new(db.conn());
+    let p_repo = crate::repository::pelanggan_repo::PelangganRepo::new(db.conn());
+
+    let cabang_list = c_repo.semua_cabang().unwrap_or_default();
+    let barang_list = b_repo.cari_by_nama(&state.cabang_id, "", 5000).unwrap_or_default();
+    let pelanggan_list = p_repo.semua_pelanggan(&state.cabang_id).unwrap_or_default();
+
+    (StatusCode::OK, Json(Some(LanMasterSyncResponse {
+        cabang_list,
+        barang_list,
+        pelanggan_list,
+    })))
 }
 
 async fn handle_ping(State(state): State<LanServerState>) -> Json<LanPingResponse> {
