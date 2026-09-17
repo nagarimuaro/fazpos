@@ -89,7 +89,7 @@ impl<'a> BarangRepo<'a> {
                    hargapokok, hargajual1, hargajual2, hargajual3, hargajual4, hargapartai,
                    stok, stokminimum, is_aktif, sync_status, created_at, updated_at
             FROM dbarang
-            WHERE cabang_id = ?1 AND (barcode = ?2 OR kode = ?2) AND is_aktif = 1
+            WHERE (cabang_id = ?1 OR ?1 = '') AND (barcode = ?2 OR kode = ?2) AND is_aktif = 1
             LIMIT 1;
             "#,
         )?;
@@ -121,7 +121,9 @@ impl<'a> BarangRepo<'a> {
                    hargapokok, hargajual1, hargajual2, hargajual3, hargajual4, hargapartai,
                    stok, stokminimum, is_aktif, sync_status, created_at, updated_at
             FROM dbarang
-            WHERE cabang_id = ?1 AND nama LIKE ?2 AND is_aktif = 1
+            WHERE (cabang_id = ?1 OR ?1 = '')
+              AND (nama LIKE ?2 OR kode LIKE ?2 OR barcode LIKE ?2)
+              AND is_aktif = 1
             ORDER BY nama ASC
             LIMIT ?3;
             "#,

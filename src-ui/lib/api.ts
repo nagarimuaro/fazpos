@@ -23,6 +23,23 @@ export interface ProductDTO {
   tag?: string;
 }
 
+export interface SimpanProdukPayload {
+  id?: string;
+  kode: string;
+  barcode?: string;
+  nama: string;
+  kategori?: string;
+  satuan?: string;
+  rak?: string;
+  supplier?: string;
+  hargapokok: number;
+  hargajual1: number;
+  hargajual2?: number;
+  hargajual3?: number;
+  stok: number;
+  stokminimum?: number;
+}
+
 export interface ProductStatsDTO {
   total_produk: number;
   stok_optimal: number;
@@ -492,6 +509,12 @@ export const api = {
   aktivasiLisensi: (token: string) => invoke<StatusInfoDTO>("aktivasi_lisensi", { token }),
   getCatalogProducts: (keyword?: string) =>
     invoke<ProductDTO[]>("get_catalog_products", { keyword }),
+  simpanProduk: (payload: SimpanProdukPayload) =>
+    invoke<ProductDTO>("simpan_produk", { payload }),
+  hapusProduk: (id: string) =>
+    invoke<boolean>("hapus_produk", { id }),
+  restockProduk: (id: string, qty: number) =>
+    invoke<number>("restock_produk", { id, qty }),
   scanBarcode: (code: string) =>
     invoke<CartSummaryDTO>("scan_barcode", { code }),
   updateCartQty: (index: number, qty: number) =>

@@ -1576,10 +1576,8 @@ fn get_catalog_products(state: State<AppState>, keyword: Option<String>) -> Resu
         })
         .collect();
 
-    for p in default_products {
-        if !result.iter().any(|r| r.kode == p.kode) {
-            result.push(p);
-        }
+    if result.is_empty() && kw.trim().is_empty() {
+        result.extend(default_products);
     }
 
     if !kw.trim().is_empty() {
@@ -1595,15 +1593,141 @@ fn get_catalog_products(state: State<AppState>, keyword: Option<String>) -> Resu
     Ok(result)
 }
 
+#[derive(Debug, serde::Deserialize)]
+pub struct SimpanProdukPayload {
+    pub id: Option<String>,
+    pub kode: String,
+    pub barcode: Option<String>,
+    pub nama: String,
+    pub kategori: Option<String>,
+    pub satuan: Option<String>,
+    pub rak: Option<String>,
+    pub hargapokok: f64,
+    pub hargajual1: f64,
+    pub hargajual2: Option<f64>,
+    pub hargajual3: Option<f64>,
+    pub stok: f64,
+    pub stokminimum: Option<f64>,
+}
+
 #[tauri::command]
-fn get_product_stats(_state: State<AppState>) -> Result<ProductStatsDTO, String> {
+fn simpan_produk(state: State<AppState>, payload: SimpanProdukPayload) -> Result<ProductDTO, String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let repo = BarangRepo::new(db.conn());
+
+    let id = payload.id.filter(|s| !s.is_empty()).unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+    let mut b = DBarang::baru(
+        &state.cabang_id,
+        payload.kode.trim(),
+        payload.nama.trim(),
+        payload.hargapokok,
+        payload.hargajual1,
+        payload.stok,
+    );
+    b.id = id.clone();
+    b.barcode = payload.barcode.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
+    b.kategori = payload.kategori.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
+    b.satuan = payload.satuan.map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).unwrap_or_else(|| "Pcs".to_string());
+    b.rak = payload.rak.map(|s| s.trim().to_string()).filter(|s| !s.is_empty());
+    b.hargajual2 = payload.hargajual2.unwrap_or(payload.hargajual1);
+    b.hargajual3 = payload.hargajual3.unwrap_or(payload.hargajual1);
+    b.stokminimum = payload.stokminimum.unwrap_or(10.0);
+    b.is_aktif = true;
+    b.sync_status = "pending".to_string();
+
+    repo.simpan(&b).map_err(|e| e.to_string())?;
+
+    let is_kritis = b.stok <= b.stokminimum;
+    let margin = if b.hargapokok > 0.0 {
+        ((b.hargajual1 - b.hargapokok) / b.hargapokok * 100.0 * 10.0).round() / 10.0
+    } else {
+        25.0
+    };
+
+    Ok(ProductDTO {
+        id: b.id,
+        kode: b.kode,
+        barcode: b.barcode.unwrap_or_default(),
+        nama: b.nama,
+        kategori: b.kategori.unwrap_or_else(|| "Umum".to_string()),
+        satuan: b.satuan,
+        rak: b.rak.unwrap_or_else(|| "A-01".to_string()),
+        supplier: "PT Sumber Makmur".to_string(),
+        hargapokok: b.hargapokok,
+        hargajual1: b.hargajual1,
+        hargajual2: b.hargajual2,
+        hargajual3: b.hargajual3,
+        margin_persen: margin,
+        stok: b.stok,
+        stokminimum: b.stokminimum,
+        is_kritis,
+        expired: Some("12/2027".to_string()),
+        tag: if b.stok == 0.0 {
+            Some("Habis".to_string())
+        } else if is_kritis {
+            Some("Segera Order".to_string())
+        } else {
+            None
+        },
+    })
+}
+
+#[tauri::command]
+fn hapus_produk(state: State<AppState>, id: String) -> Result<bool, String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let conn = db.conn();
+    let rows = conn.execute(
+        "DELETE FROM dbarang WHERE (id = ?1 OR kode = ?1) AND id NOT IN (SELECT barang_id FROM tpenjualandetail)",
+        rusqlite::params![id],
+    ).unwrap_or(0);
+    if rows == 0 {
+        conn.execute(
+            "UPDATE dbarang SET is_aktif = 0, sync_status = 'pending', updated_at = CURRENT_TIMESTAMP WHERE id = ?1 OR kode = ?1",
+            rusqlite::params![id],
+        ).map_err(|e| e.to_string())?;
+    }
+    Ok(true)
+}
+
+#[tauri::command]
+fn restock_produk(state: State<AppState>, id: String, qty: f64) -> Result<f64, String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let repo = BarangRepo::new(db.conn());
+    repo.update_stok(&id, qty).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn get_product_stats(state: State<AppState>) -> Result<ProductStatsDTO, String> {
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let conn = db.conn();
+    let total_produk: i64 = conn
+        .query_row("SELECT COUNT(*) FROM dbarang WHERE is_aktif = 1", [], |r| r.get(0))
+        .unwrap_or(0);
+    let stok_kosong: i64 = conn
+        .query_row("SELECT COUNT(*) FROM dbarang WHERE is_aktif = 1 AND stok <= 0", [], |r| r.get(0))
+        .unwrap_or(0);
+    let stok_menipis: i64 = conn
+        .query_row("SELECT COUNT(*) FROM dbarang WHERE is_aktif = 1 AND stok > 0 AND stok <= stokminimum", [], |r| r.get(0))
+        .unwrap_or(0);
+    let stok_optimal: i64 = (total_produk - stok_kosong - stok_menipis).max(0);
+    let valuasi_aset: f64 = conn
+        .query_row("SELECT COALESCE(SUM(stok * hargapokok), 0.0) FROM dbarang WHERE is_aktif = 1", [], |r| r.get(0))
+        .unwrap_or(0.0);
+    let avg_margin: f64 = conn
+        .query_row(
+            "SELECT COALESCE(AVG(CASE WHEN hargapokok > 0 THEN ((hargajual1 - hargapokok) / hargapokok) * 100.0 ELSE 0.0 END), 23.8) FROM dbarang WHERE is_aktif = 1",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap_or(23.8);
+
     Ok(ProductStatsDTO {
-        total_produk: 1428,
-        stok_optimal: 1385,
-        stok_menipis: 38,
-        stok_kosong: 5,
-        valuasi_aset: 48650000.0,
-        avg_margin: 23.8,
+        total_produk: total_produk as usize,
+        stok_optimal: stok_optimal as usize,
+        stok_menipis: stok_menipis as usize,
+        stok_kosong: stok_kosong as usize,
+        valuasi_aset,
+        avg_margin: (avg_margin * 10.0).round() / 10.0,
     })
 }
 
@@ -2097,6 +2221,30 @@ fn inisialisasi_data_dasar(db: &Database) -> Result<(String, String), Box<dyn st
         barang_repo.simpan(&b)?;
     }
 
+    let retail_items = [
+        ("BRG-0001", "8992761001201", "Indomie Goreng Spesial 85g", "Makanan & Minuman", "Bks", 2750.0, 3500.0, 142.0),
+        ("BRG-0024", "8993077110192", "Minyak Goreng Sania 2L Pouch", "Kebutuhan Rumah", "Pouch", 32000.0, 36500.0, 48.0),
+        ("BRG-0089", "8998009010411", "Susu Ultra Milk Coklat 250ml", "Makanan & Minuman", "Kotak", 5400.0, 6500.0, 6.0),
+        ("BRG-0112", "8886008101053", "Aqua Air Mineral Botol 600ml", "Makanan & Minuman", "Btl", 2800.0, 3500.0, 96.0),
+        ("BRG-0145", "8991001402231", "Beras Ramos Super Pandan Wangi 5kg", "Kebutuhan Rumah", "Krg", 68000.0, 74000.0, 24.0),
+        ("BRG-0201", "8991002105128", "Teh Botol Sosro PET 350ml", "Makanan & Minuman", "Btl", 3100.0, 4000.0, 0.0),
+        ("BRG-0255", "8999999052028", "Sabun Batang Lifebuoy Total 10 Merah 85g", "Personal Care", "Pcs", 3400.0, 4500.0, 78.0),
+        ("BRG-0312", "8991002301018", "Kopi Kapal Api Spesial Mix Renceng 10x24g", "Makanan & Minuman", "Rcg", 12500.0, 15000.0, 32.0),
+        ("BRG-0340", "8992775110023", "Gula Pasir Putih Gulaku Premium 1kg", "Kebutuhan Rumah", "Bks", 15500.0, 17500.0, 55.0),
+        ("BRG-0402", "8992775210150", "Pocari Sweat Isotonik Can 330ml", "Makanan & Minuman", "Can", 6200.0, 7800.0, 64.0),
+    ];
+
+    for (kode, barcode, nama, kategori, satuan, hpp, jual, stok) in retail_items {
+        if barang_repo.cari_by_barcode_atau_kode(&cabang.id, kode)?.is_none() {
+            let mut b = DBarang::baru(&cabang.id, kode, nama, hpp, jual, stok);
+            b.barcode = Some(barcode.to_string());
+            b.kategori = Some(kategori.to_string());
+            b.satuan = satuan.to_string();
+            b.stokminimum = 10.0;
+            let _ = barang_repo.simpan(&b);
+        }
+    }
+
     // Inisialisasi User Admin Permanen jika belum ada
     let operator_repo = OperatorRepo::new(db.conn());
     if operator_repo.cari_by_kode(&cabang.id, "admin")?.is_none() {
@@ -2235,6 +2383,9 @@ fn main() {
             get_transactions,
             get_transaction_stats,
             get_product_stats,
+            simpan_produk,
+            hapus_produk,
+            restock_produk,
             login,
             logout,
             get_operators,

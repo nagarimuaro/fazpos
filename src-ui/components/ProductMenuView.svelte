@@ -55,13 +55,26 @@
   let formJual = $state(0);
   let formStok = $state(10);
 
+  let isSavingProduct = $state(false);
+  let isDeletingProduct = $state(false);
+  let isSavingRestock = $state(false);
+
+  // Form states for restock modal
+  let restockSelectedKode = $state("");
+  let restockQty = $state(24);
+  let restockHarga = $state(2750);
+  let restockFaktur = $state("PO-" + new Date().toISOString().slice(0, 10).replace(/-/g, ""));
+
   async function loadData() {
     try {
       const kw = searchQuery.trim() || undefined;
       products = await api.getCatalogProducts(kw);
       stats = await api.getProductStats();
+      if (!restockSelectedKode && products.length > 0) {
+        restockSelectedKode = products[0].kode;
+      }
     } catch (err) {
-      console.error(err);
+      console.error("loadData:", err);
     }
   }
 
@@ -104,69 +117,83 @@
     isAddModalOpen = true;
   }
 
-  function saveProduct() {
+  async function saveProduct() {
     if (!formNama.trim()) {
-      alert("Nama produk wajib diisi");
+      showToast("Nama produk wajib diisi");
+      return;
+    }
+    if (!formKode.trim()) {
+      showToast("Kode / SKU produk wajib diisi");
       return;
     }
 
-    const margin = formHpp > 0 ? Math.round(((formJual - formHpp) / formHpp) * 1000) / 10 : 25;
-    const isKritis = formStok <= 10;
-
-    if (editingProduct) {
-      // update
-      const idx = products.findIndex((p) => p.id === editingProduct!.id);
-      if (idx !== -1) {
-        products[idx] = {
-          ...products[idx],
-          nama: formNama,
-          barcode: formBarcode,
-          kode: formKode,
-          kategori: formKategori,
-          satuan: formSatuan,
-          rak: formRak,
-          supplier: formSupplier,
-          hargapokok: formHpp,
-          hargajual1: formJual,
-          margin_persen: margin,
-          stok: formStok,
-          is_kritis: isKritis,
-          tag: formStok === 0 ? "Habis" : isKritis ? "Segera Order" : undefined,
-        };
-      }
-      showToast(`Produk ${formNama} berhasil diperbarui.`);
-    } else {
-      // create
-      const newP: ProductDTO = {
-        id: "p-" + Date.now(),
-        kode: formKode,
-        barcode: formBarcode,
-        nama: formNama,
+    isSavingProduct = true;
+    try {
+      await api.simpanProduk({
+        id: editingProduct?.id,
+        kode: formKode.trim(),
+        barcode: formBarcode.trim() || undefined,
+        nama: formNama.trim(),
         kategori: formKategori,
         satuan: formSatuan,
-        rak: formRak,
-        supplier: formSupplier,
-        hargapokok: formHpp,
-        hargajual1: formJual,
-        hargajual2: Math.round(formJual * 0.95),
-        hargajual3: Math.round(formJual * 0.90),
-        margin_persen: margin,
-        stok: formStok,
+        rak: formRak.trim() || undefined,
+        supplier: formSupplier.trim() || undefined,
+        hargapokok: formHpp || 0,
+        hargajual1: formJual || 0,
+        hargajual2: Math.round((formJual || 0) * 0.95),
+        hargajual3: Math.round((formJual || 0) * 0.90),
+        stok: formStok || 0,
         stokminimum: 10,
-        is_kritis: isKritis,
-        tag: formStok === 0 ? "Habis" : isKritis ? "Segera Order" : undefined,
-      };
-      products = [newP, ...products];
-      showToast(`Produk baru ${formNama} berhasil disimpan.`);
+      });
+      await loadData();
+      showToast(
+        editingProduct
+          ? `Produk ${formNama} berhasil diperbarui di database SQLite!`
+          : `Produk baru ${formNama} berhasil disimpan permanen ke database SQLite!`
+      );
+      isAddModalOpen = false;
+    } catch (err: any) {
+      showToast("Gagal menyimpan produk: " + (err?.message || err));
+    } finally {
+      isSavingProduct = false;
     }
-
-    isAddModalOpen = false;
   }
 
-  function deleteProduct(p: ProductDTO) {
+  async function deleteProduct(p: ProductDTO) {
     if (confirm(`Apakah Anda yakin ingin menghapus produk ${p.nama} (${p.kode})?`)) {
-      products = products.filter((item) => item.id !== p.id);
-      showToast(`Produk ${p.nama} berhasil dihapus.`);
+      isDeletingProduct = true;
+      try {
+        await api.hapusProduk(p.id);
+        await loadData();
+        showToast(`Produk ${p.nama} berhasil dihapus dari database.`);
+      } catch (err: any) {
+        showToast("Gagal menghapus produk: " + (err?.message || err));
+      } finally {
+        isDeletingProduct = false;
+      }
+    }
+  }
+
+  async function saveRestock() {
+    const targetProduct = products.find((p) => p.kode === restockSelectedKode) || products[0];
+    if (!targetProduct) {
+      showToast("Silakan pilih produk yang akan direstock.");
+      return;
+    }
+    if (restockQty <= 0) {
+      showToast("Jumlah masuk (qty) harus lebih dari 0.");
+      return;
+    }
+    isSavingRestock = true;
+    try {
+      await api.restockProduk(targetProduct.id, restockQty);
+      await loadData();
+      showToast(`Stok ${targetProduct.nama} berhasil ditambah +${restockQty} ke database SQLite!`);
+      isRestockModalOpen = false;
+    } catch (err: any) {
+      showToast("Gagal restock: " + (err?.message || err));
+    } finally {
+      isSavingRestock = false;
     }
   }
 
@@ -956,18 +983,25 @@
         <div class="px-5 py-3 bg-slate-50 border-t border-slate-300 flex items-center justify-end gap-2">
           <button
             type="button"
+            disabled={isSavingProduct}
             onclick={() => (isAddModalOpen = false)}
-            class="px-4 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg text-xs font-bold shadow-2xs cursor-pointer"
+            class="px-4 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg text-xs font-bold shadow-2xs cursor-pointer disabled:opacity-50"
           >
             Batal
           </button>
           <button
             type="button"
+            disabled={isSavingProduct}
             onclick={saveProduct}
-            class="px-4 py-1.5 bg-primary hover:bg-primary-dark text-white rounded-lg text-xs font-bold shadow-sm cursor-pointer border-none flex items-center gap-1"
+            class="px-4 py-1.5 bg-primary hover:bg-primary-dark text-white rounded-lg text-xs font-bold shadow-sm cursor-pointer border-none flex items-center gap-1 disabled:opacity-50"
           >
-            <span class="material-symbols-outlined text-[16px]">save</span>
-            Simpan Produk
+            {#if isSavingProduct}
+              <span class="material-symbols-outlined text-[16px] animate-spin">refresh</span>
+              Menyimpan...
+            {:else}
+              <span class="material-symbols-outlined text-[16px]">save</span>
+              Simpan Produk
+            {/if}
           </button>
         </div>
       </div>
@@ -1009,6 +1043,7 @@
             <label for="restock-pilih" class="block font-semibold text-slate-700 mb-1">Pilih Produk</label>
             <select
               id="restock-pilih"
+              bind:value={restockSelectedKode}
               class="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded text-xs font-medium focus:outline-none"
             >
               {#each products as p}
@@ -1023,7 +1058,8 @@
               <input
                 id="restock-qty"
                 type="number"
-                value="24"
+                min="1"
+                bind:value={restockQty}
                 class="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded font-mono text-xs focus:outline-none text-right font-bold"
               />
             </div>
@@ -1032,7 +1068,8 @@
               <input
                 id="restock-harga"
                 type="number"
-                value="2750"
+                min="0"
+                bind:value={restockHarga}
                 class="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded font-mono text-xs focus:outline-none text-right"
               />
             </div>
@@ -1043,7 +1080,7 @@
             <input
               id="restock-faktur"
               type="text"
-              value="PO-2026-0910"
+              bind:value={restockFaktur}
               class="w-full px-2.5 py-1.5 bg-slate-50 border border-slate-300 rounded font-mono text-xs focus:outline-none"
             />
           </div>
@@ -1052,21 +1089,25 @@
         <div class="px-5 py-3 bg-slate-50 border-t border-slate-300 flex items-center justify-end gap-2">
           <button
             type="button"
+            disabled={isSavingRestock}
             onclick={() => (isRestockModalOpen = false)}
-            class="px-4 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg text-xs font-bold shadow-2xs cursor-pointer"
+            class="px-4 py-1.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 rounded-lg text-xs font-bold shadow-2xs cursor-pointer disabled:opacity-50"
           >
             Batal
           </button>
           <button
             type="button"
-            onclick={() => {
-              isRestockModalOpen = false;
-              showToast("Penerimaan stok masuk berhasil dicatat ke database SQLite!");
-            }}
-            class="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-sm cursor-pointer border-none flex items-center gap-1"
+            disabled={isSavingRestock}
+            onclick={saveRestock}
+            class="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-sm cursor-pointer border-none flex items-center gap-1 disabled:opacity-50"
           >
-            <span class="material-symbols-outlined text-[16px]">check</span>
-            Simpan Stok Masuk
+            {#if isSavingRestock}
+              <span class="material-symbols-outlined text-[16px] animate-spin">refresh</span>
+              Menyimpan...
+            {:else}
+              <span class="material-symbols-outlined text-[16px]">check</span>
+              Simpan Stok Masuk
+            {/if}
           </button>
         </div>
       </div>
