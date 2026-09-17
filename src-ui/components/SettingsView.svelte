@@ -281,6 +281,75 @@
   let manualServerPort = $state(7890);
   let isConnectingManual = $state(false);
 
+  // Status Koneksi ke Server Pusat (Untuk Toko Cabang / Client)
+  let serverConnectionStatus = $state<{
+    checked: boolean;
+    online: boolean;
+    latency_ms: number;
+    pesan: string;
+    checking: boolean;
+    ip_checked: string;
+  }>({
+    checked: false,
+    online: false,
+    latency_ms: 0,
+    pesan: "",
+    checking: false,
+    ip_checked: "",
+  });
+
+  let isIpCopied = $state(false);
+
+  function copyServerIp(ip: string) {
+    if (!ip) return;
+    navigator.clipboard?.writeText(ip);
+    isIpCopied = true;
+    showToast(`Alamat IP ${ip} berhasil disalin ke clipboard!`);
+    setTimeout(() => (isIpCopied = false), 2500);
+  }
+
+  async function checkServerConnection(targetIp?: string) {
+    const ip = (targetIp || manualServerIp.trim() || networkConfig?.server_ip || "").trim();
+    if (!ip) {
+      serverConnectionStatus = {
+        checked: true,
+        online: false,
+        latency_ms: 0,
+        pesan: "Alamat IP Server Pusat belum ditentukan",
+        checking: false,
+        ip_checked: "",
+      };
+      return;
+    }
+    serverConnectionStatus.checking = true;
+    try {
+      const res = await api.pingLanDevice(ip, 7890);
+      serverConnectionStatus = {
+        checked: true,
+        online: res.sukses,
+        latency_ms: res.latency_ms,
+        pesan: res.pesan,
+        checking: false,
+        ip_checked: ip,
+      };
+      if (res.sukses) {
+        showToast(`🟢 Terhubung ke Server Pusat (${ip}) - Respon ${res.latency_ms}ms`);
+      } else {
+        showToast(`🔴 Server Pusat (${ip}) tidak merespons: ${res.pesan}`);
+      }
+    } catch (e: any) {
+      serverConnectionStatus = {
+        checked: true,
+        online: false,
+        latency_ms: 0,
+        pesan: e?.message || String(e),
+        checking: false,
+        ip_checked: ip,
+      };
+      showToast(`🔴 Gagal menghubungi Server Pusat: ${e?.message || e}`);
+    }
+  }
+
   // Multi-Cabang & Toko Role State
   let tokoMode = $state<"pusat" | "cabang">("pusat");
   let isSwitchingMode = $state(false);
@@ -342,11 +411,28 @@
         networkConfig.server_ip = device.ip_address;
         networkConfig.device_role = "client";
       }
+      manualServerIp = device.ip_address;
+      await checkServerConnection(device.ip_address);
       showToast(
         `Berhasil tersambung ke Server ${device.device_nama} (${device.ip_address})!`,
       );
     } catch (e: any) {
       showToast("Gagal gabung server: " + (e?.message || e));
+    }
+  }
+
+  async function handleHubungkanDanTarik(ip: string, port = 7890) {
+    try {
+      await api.gabungKeServer(ip, port);
+      if (networkConfig) {
+        networkConfig.server_ip = ip;
+        networkConfig.device_role = "client";
+      }
+      manualServerIp = ip;
+      await checkServerConnection(ip);
+      await handleTarikMasterLan(ip);
+    } catch (e: any) {
+      showToast("Gagal menyambungkan & menarik data: " + (e?.message || e));
     }
   }
 
@@ -362,15 +448,15 @@
         manualServerPort || 7890,
       );
       await loadLanDevices();
-      if (networkConfig?.device_role === "client") {
-        await api.gabungKeServer(dev.ip_address, dev.port);
+      await api.gabungKeServer(dev.ip_address, dev.port);
+      if (networkConfig) {
         networkConfig.server_ip = dev.ip_address;
       }
+      await checkServerConnection(dev.ip_address);
       showToast(
-        `Berhasil terhubung ke ${dev.device_nama} (${dev.ip_address}:${dev.port})!`,
+        `Berhasil terhubung ke Server ${dev.device_nama} (${dev.ip_address}:${dev.port})!`,
       );
       isManualConnectOpen = false;
-      manualServerIp = "";
     } catch (e: any) {
       showToast("Gagal hubungkan ke IP server: " + (e?.message || e));
     } finally {
@@ -476,7 +562,13 @@
       if (networkConfig?.cabang_id) {
         selectedCabangId = networkConfig.cabang_id;
       }
+      if (networkConfig?.server_ip && !manualServerIp) {
+        manualServerIp = networkConfig.server_ip;
+      }
       await Promise.allSettled([loadLanDevices(), loadSupabaseConfig()]);
+      if (tokoMode === "cabang" && (manualServerIp || networkConfig?.server_ip)) {
+        checkServerConnection(manualServerIp || networkConfig?.server_ip);
+      }
     } catch (e) {
       console.warn("loadNetworkConfig:", e);
     } finally {
@@ -1863,37 +1955,88 @@
         </div>
       {:else if activeTab === "jaringan"}
         <div class="max-w-4xl flex flex-col gap-5">
-          <!-- Header & Mode Switcher -->
+          <!-- 1. Header & Refresh Button -->
           <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-2xs space-y-4">
             <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
                 <h3 class="font-bold text-slate-900 text-base flex items-center gap-2">
-                  <span class="material-symbols-outlined text-primary text-[22px]">storefront</span>
-                  <span>Pengaturan Multi-Cabang &amp; Sinkronisasi Data</span>
+                  <span class="material-symbols-outlined text-primary text-[22px]">hub</span>
+                  <span>Pengaturan Multi-Cabang &amp; Jaringan Kasir</span>
                 </h3>
                 <p class="text-slate-500 text-xs mt-0.5">
-                  Satu database terpusat untuk seluruh cabang (Wi-Fi lokal maupun luar kota via Cloud).
+                  Satu database terpusat untuk seluruh komputer kasir &amp; cabang (Wi-Fi lokal maupun Cloud Internet).
                 </p>
               </div>
 
-              <button
-                type="button"
-                onclick={() => {
-                  loadNetworkConfig();
-                  showToast("Data jaringan & cabang diperbarui.");
-                }}
-                class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg text-xs font-semibold border border-slate-300 shadow-2xs transition-all cursor-pointer self-start sm:self-auto shrink-0"
-              >
-                <span
-                  class="material-symbols-outlined text-[16px] text-primary {isNetworkLoading
-                    ? 'animate-spin'
-                    : ''}">sync</span
+              <div class="flex items-center gap-2">
+                <button
+                  type="button"
+                  onclick={() => {
+                    loadNetworkConfig();
+                    showToast("Memindai ulang perangkat & data jaringan...");
+                  }}
+                  class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg text-xs font-semibold border border-slate-300 shadow-2xs transition-all cursor-pointer"
                 >
-                <span>Segarkan Data</span>
-              </button>
+                  <span
+                    class="material-symbols-outlined text-[16px] text-primary {isNetworkLoading || isScanningLan
+                      ? 'animate-spin'
+                      : ''}">sync</span
+                  >
+                  <span>Segarkan Jaringan</span>
+                </button>
+              </div>
             </div>
 
-            <!-- Switcher Peran Toko: Toko Pusat vs Toko Cabang -->
+            <!-- 2. Panduan Praktis 4 Langkah Koneksi 2 Laptop (Visual & Sangat Mudah Dipahami) -->
+            <div class="p-4 rounded-xl bg-gradient-to-r from-blue-50/90 via-indigo-50/70 to-slate-50 border border-blue-200 text-xs space-y-2.5">
+              <div class="flex items-center gap-2 text-blue-950 font-bold">
+                <span class="material-symbols-outlined text-blue-600 text-[18px]">tips_and_updates</span>
+                <span>Panduan Cepat: Cara Menghubungkan 2 Laptop di Toko Anda</span>
+              </div>
+              <div class="grid grid-cols-1 sm:grid-cols-4 gap-2.5 pt-1">
+                <div class="p-2.5 bg-white/90 rounded-lg border border-blue-100 space-y-1">
+                  <div class="flex items-center gap-1.5 font-bold text-blue-900 text-[11px]">
+                    <span class="w-4 h-4 rounded-full bg-blue-600 text-white text-[10px] flex items-center justify-center shrink-0">1</span>
+                    <span>1 Jaringan Wi-Fi</span>
+                  </div>
+                  <p class="text-[10px] text-slate-600 leading-snug">
+                    Hubungkan kedua laptop ke Wi-Fi toko atau Hotspot HP yang sama (tanpa kuota internet pun bisa).
+                  </p>
+                </div>
+
+                <div class="p-2.5 bg-white/90 rounded-lg border border-blue-100 space-y-1">
+                  <div class="flex items-center gap-1.5 font-bold text-blue-900 text-[11px]">
+                    <span class="w-4 h-4 rounded-full bg-blue-600 text-white text-[10px] flex items-center justify-center shrink-0">2</span>
+                    <span>Laptop 1 (Pusat)</span>
+                  </div>
+                  <p class="text-[10px] text-slate-600 leading-snug">
+                    Pilih peran <strong>"🏢 Toko Pusat"</strong> di bawah. Catat nomor IP yang tertera di banner hijau.
+                  </p>
+                </div>
+
+                <div class="p-2.5 bg-white/90 rounded-lg border border-blue-100 space-y-1">
+                  <div class="flex items-center gap-1.5 font-bold text-blue-900 text-[11px]">
+                    <span class="w-4 h-4 rounded-full bg-blue-600 text-white text-[10px] flex items-center justify-center shrink-0">3</span>
+                    <span>Laptop 2 (Kasir)</span>
+                  </div>
+                  <p class="text-[10px] text-slate-600 leading-snug">
+                    Pilih peran <strong>"🏪 Toko Cabang"</strong>. Radar otomatis mendeteksi Server Pusat atau ketik IP Pusat.
+                  </p>
+                </div>
+
+                <div class="p-2.5 bg-white/90 rounded-lg border border-blue-100 space-y-1">
+                  <div class="flex items-center gap-1.5 font-bold text-blue-900 text-[11px]">
+                    <span class="w-4 h-4 rounded-full bg-blue-600 text-white text-[10px] flex items-center justify-center shrink-0">4</span>
+                    <span>Selesai &amp; Tarik Data</span>
+                  </div>
+                  <p class="text-[10px] text-slate-600 leading-snug">
+                    Klik <strong>"Hubungkan"</strong> hingga muncul 🟢 Hijau, lalu klik <strong>"Tarik Data"</strong> agar produk masuk!
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <!-- 3. Switcher Peran Toko: Toko Pusat vs Toko Cabang -->
             <div class="pt-3 border-t border-slate-100">
               <span class="block text-xs font-bold text-slate-700 mb-2">Pilih Peran Komputer Ini:</span>
               <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1911,13 +2054,13 @@
                   </div>
                   <div class="space-y-0.5">
                     <div class="flex items-center gap-2">
-                      <span class="font-bold text-xs text-slate-900">🏢 Toko Pusat (Headquarters)</span>
+                      <span class="font-bold text-xs text-slate-900">🏢 Toko Pusat (Headquarters / Server)</span>
                       {#if tokoMode === "pusat"}
                         <span class="px-1.5 py-0.2 rounded text-[9px] font-bold bg-primary text-white">AKTIF</span>
                       {/if}
                     </div>
                     <p class="text-[11px] text-slate-500 leading-snug">
-                      Pusat master produk, harga, dan pendaftaran cabang. Hanya Pusat yang berhak menambah cabang baru.
+                      Pusat master produk, harga, dan pendaftaran cabang. Komputer ini melayani kasir-kasir lain di toko.
                     </p>
                   </div>
                 </button>
@@ -1936,13 +2079,13 @@
                   </div>
                   <div class="space-y-0.5">
                     <div class="flex items-center gap-2">
-                      <span class="font-bold text-xs text-slate-900">🏪 Toko Cabang (Outlet)</span>
+                      <span class="font-bold text-xs text-slate-900">🏪 Toko Cabang / Kasir (Outlet Client)</span>
                       {#if tokoMode === "cabang"}
                         <span class="px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-600 text-white">AKTIF</span>
                       {/if}
                     </div>
                     <p class="text-[11px] text-slate-500 leading-snug">
-                      Mengambil katalog produk dari Toko Pusat. Kasir tetap bisa jualan lancar saat offline (tanpa internet).
+                      Mengambil katalog master produk dari Toko Pusat. Kasir tetap bisa jualan offline jika Wi-Fi putus.
                     </p>
                   </div>
                 </button>
@@ -1950,7 +2093,322 @@
             </div>
           </div>
 
-          <!-- TAMPILAN JIKA MODE TOKO PUSAT -->
+          <!-- 4. INDIKATOR STATUS KONEKSI UTAMA (HERO BANNER) -->
+          {#if tokoMode === "pusat"}
+            <!-- Hero Banner: SERVER PUSAT AKTIF -->
+            <div class="p-5 rounded-2xl bg-gradient-to-r from-emerald-900 via-teal-900 to-slate-900 text-white shadow-md border border-emerald-500/40 space-y-4">
+              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div class="flex items-center gap-3">
+                  <div class="relative flex items-center justify-center">
+                    <span class="w-4 h-4 rounded-full bg-emerald-400 block animate-ping absolute"></span>
+                    <span class="w-4 h-4 rounded-full bg-emerald-400 block relative"></span>
+                  </div>
+                  <div>
+                    <span class="text-[10px] font-bold uppercase tracking-widest text-emerald-300">STATUS PERANGKAT INI</span>
+                    <h4 class="text-base font-extrabold text-white flex items-center gap-2">
+                      <span>SERVER PUSAT AKTIF &amp; STANDBY</span>
+                    </h4>
+                    <p class="text-xs text-emerald-200/90 mt-0.5">
+                      Laptop ini bertindak sebagai <strong>Database Master</strong>. Laptop kasir lain dapat terhubung ke alamat IP di bawah:
+                    </p>
+                  </div>
+                </div>
+
+                <div class="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onclick={() => copyServerIp(networkConfig?.ip_address || "192.168.100.75")}
+                    class="px-3.5 py-2 bg-emerald-700/80 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer border border-emerald-500/50 shadow-xs transition-all"
+                  >
+                    <span class="material-symbols-outlined text-[16px]">
+                      {isIpCopied ? "check" : "content_copy"}
+                    </span>
+                    <span>{isIpCopied ? "Tersalin!" : "Salin IP Server"}</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Strip Detail Koneksi Pusat -->
+              <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-3 border-t border-emerald-800/80 text-xs">
+                <div class="p-2.5 bg-white/10 rounded-xl">
+                  <span class="text-[10px] text-emerald-300 block font-medium">Alamat IP Server:</span>
+                  <span class="font-mono font-bold text-sm text-white">{networkConfig?.ip_address || "192.168.100.75"}</span>
+                </div>
+                <div class="p-2.5 bg-white/10 rounded-xl">
+                  <span class="text-[10px] text-emerald-300 block font-medium">Port Layanan:</span>
+                  <span class="font-mono font-bold text-sm text-white">7890 (Sync) &amp; 7891 (Radar)</span>
+                </div>
+                <div class="p-2.5 bg-white/10 rounded-xl">
+                  <span class="text-[10px] text-emerald-300 block font-medium">Kasir Lain Terdeteksi:</span>
+                  <span class="font-bold text-sm text-white">{discoveredDevices.length} Komputer di Wi-Fi</span>
+                </div>
+                <div class="p-2.5 bg-white/10 rounded-xl">
+                  <span class="text-[10px] text-emerald-300 block font-medium">Status Database:</span>
+                  <span class="font-bold text-sm text-emerald-300">🟢 Master Siap</span>
+                </div>
+              </div>
+            </div>
+
+          {:else}
+            <!-- Hero Banner: TOKO CABANG / KASIR -->
+            {#if serverConnectionStatus.online}
+              <!-- Sub-banner: 🟢 TERHUBUNG -->
+              <div class="p-5 rounded-2xl bg-gradient-to-r from-emerald-950 via-emerald-900 to-teal-950 text-white shadow-md border-2 border-emerald-500 space-y-3">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div class="flex items-center gap-3">
+                    <div class="relative flex items-center justify-center">
+                      <span class="w-4 h-4 rounded-full bg-emerald-400 block animate-ping absolute"></span>
+                      <span class="w-4 h-4 rounded-full bg-emerald-400 block relative"></span>
+                    </div>
+                    <div>
+                      <span class="text-[10px] font-bold uppercase tracking-widest text-emerald-300">STATUS KONEKSI KE SERVER</span>
+                      <h4 class="text-base font-extrabold text-white flex items-center gap-2">
+                        <span>🟢 TERHUBUNG KE SERVER PUSAT</span>
+                      </h4>
+                      <p class="text-xs text-emerald-200 mt-0.5">
+                        Komputer kasir ini terhubung aktif ke <strong>{serverConnectionStatus.ip_checked || networkConfig?.server_ip || manualServerIp}:7890</strong>
+                        (Respon cepat: <span class="font-mono font-bold text-emerald-300">{serverConnectionStatus.latency_ms} ms</span>).
+                      </p>
+                    </div>
+                  </div>
+
+                  <div class="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onclick={() => checkServerConnection()}
+                      disabled={serverConnectionStatus.checking}
+                      class="px-3 py-2 bg-emerald-800/80 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer border border-emerald-600/50 shadow-xs transition-all"
+                    >
+                      <span class="material-symbols-outlined text-[16px] {serverConnectionStatus.checking ? 'animate-spin' : ''}">refresh</span>
+                      <span>Uji Ulang</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onclick={() => handleTarikMasterLan()}
+                      disabled={isPullingMaster}
+                      class="px-3.5 py-2 bg-emerald-500 hover:bg-emerald-400 text-emerald-950 rounded-xl text-xs font-extrabold flex items-center gap-1.5 cursor-pointer border-none shadow-md transition-all"
+                    >
+                      <span class="material-symbols-outlined text-[16px] {isPullingMaster ? 'animate-spin' : ''}">download</span>
+                      <span>{isPullingMaster ? "Menarik..." : "Tarik Data Master"}</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+            {:else}
+              <!-- Sub-banner: 🔴 BELUM TERHUBUNG -->
+              <div class="p-5 rounded-2xl bg-gradient-to-r from-rose-950 via-red-950 to-slate-900 text-white shadow-md border-2 border-rose-500/80 space-y-3">
+                <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                  <div class="flex items-start gap-3">
+                    <span class="material-symbols-outlined text-rose-400 text-[26px] shrink-0 mt-0.5">error</span>
+                    <div>
+                      <span class="text-[10px] font-bold uppercase tracking-widest text-rose-300">STATUS KONEKSI KE SERVER</span>
+                      <h4 class="text-base font-extrabold text-white">
+                        🔴 BELUM TERHUBUNG KE SERVER PUSAT
+                      </h4>
+                      <p class="text-xs text-rose-200/90 mt-0.5 max-w-xl leading-relaxed">
+                        Laptop kasir ini belum tersambung ke komputer Toko Pusat. Pastikan kedua laptop terhubung ke Wi-Fi / Hotspot yang sama, lalu masukkan IP Server Pusat di bawah ini:
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onclick={() => checkServerConnection()}
+                    disabled={serverConnectionStatus.checking}
+                    class="px-3 py-2 bg-rose-800 hover:bg-rose-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer border border-rose-600/50 shadow-xs transition-all self-start shrink-0"
+                  >
+                    <span class="material-symbols-outlined text-[16px] {serverConnectionStatus.checking ? 'animate-spin' : ''}">sensors</span>
+                    <span>{serverConnectionStatus.checking ? "Memeriksa..." : "Cek Sinyal Sekarang"}</span>
+                  </button>
+                </div>
+
+                <!-- Inline Quick Connect Bar -->
+                <div class="p-3 bg-white/10 rounded-xl flex flex-col sm:flex-row items-stretch sm:items-center gap-2 text-xs">
+                  <span class="font-bold text-slate-200 shrink-0">Ketik IP Laptop Pusat:</span>
+                  <input
+                    type="text"
+                    bind:value={manualServerIp}
+                    placeholder="Contoh: 192.168.100.75"
+                    class="flex-1 px-3 py-1.5 bg-black/40 border border-rose-400/40 rounded-lg text-white font-mono text-xs focus:ring-1 focus:ring-emerald-400 outline-hidden"
+                  />
+                  <button
+                    type="button"
+                    onclick={() => handleHubungkanDanTarik(manualServerIp)}
+                    disabled={serverConnectionStatus.checking || isPullingMaster || !manualServerIp.trim()}
+                    class="px-4 py-1.5 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-emerald-950 font-bold rounded-lg text-xs cursor-pointer border-none shadow-sm flex items-center justify-center gap-1.5 shrink-0"
+                  >
+                    <span class="material-symbols-outlined text-[16px]">power</span>
+                    <span>Hubungkan &amp; Tarik Data</span>
+                  </button>
+                </div>
+              </div>
+            {/if}
+          {/if}
+
+          <!-- 5. RADAR PERANGKAT DI JARINGAN WI-FI (LIVE LAN DEVICE RADAR) -->
+          <div class="p-4 sm:p-5 bg-white border border-slate-200 rounded-2xl shadow-2xs space-y-4">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <div class="font-bold text-slate-900 text-sm flex items-center gap-2">
+                  <span class="material-symbols-outlined text-primary text-[20px]">radar</span>
+                  <span>Radar Perangkat di Jaringan Wi-Fi</span>
+                  <span class="px-2 py-0.5 rounded-full text-[10px] font-bold font-mono bg-primary/10 text-primary">
+                    Port 7891 UDP &amp; 7890 HTTP
+                  </span>
+                </div>
+                <p class="text-[11px] text-slate-500 mt-0.5">
+                  Mendeteksi secara otomatis laptop kasir dan server FazPOS yang berada di Wi-Fi yang sama.
+                </p>
+              </div>
+
+              <div class="flex items-center gap-2">
+                <button
+                  type="button"
+                  onclick={() => (isManualConnectOpen = true)}
+                  class="flex items-center gap-1 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold border border-slate-300 cursor-pointer shadow-2xs"
+                >
+                  <span class="material-symbols-outlined text-[15px]">add_link</span>
+                  <span>Sambung Manual via IP</span>
+                </button>
+
+                <button
+                  type="button"
+                  onclick={loadLanDevices}
+                  disabled={isScanningLan}
+                  class="flex items-center gap-1 px-3 py-1.5 bg-primary/10 hover:bg-primary/20 text-primary rounded-lg text-xs font-bold border border-primary/20 cursor-pointer shadow-2xs"
+                >
+                  <span class="material-symbols-outlined text-[15px] {isScanningLan ? 'animate-spin' : ''}">sync</span>
+                  <span>Pindai Ulang</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Sub-Card A: KOMPUTER INI (Perangkat Saat Ini) -->
+            <div class="p-3.5 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
+              <div class="flex items-center justify-between text-xs">
+                <div class="flex items-center gap-2.5">
+                  <div class="w-8 h-8 rounded-lg bg-primary text-white flex items-center justify-center shrink-0">
+                    <span class="material-symbols-outlined text-[18px]">computer</span>
+                  </div>
+                  <div>
+                    <div class="flex items-center gap-2">
+                      <span class="font-bold text-slate-900">{networkConfig?.device_nama || "Komputer Ini"}</span>
+                      <span class="px-2 py-0.2 rounded text-[10px] font-bold uppercase {tokoMode === 'pusat' ? 'bg-primary text-white' : 'bg-emerald-700 text-white'}">
+                        {tokoMode === 'pusat' ? "🏢 SERVER PUSAT" : "🏪 KASIR CABANG"}
+                      </span>
+                    </div>
+                    <span class="text-[11px] text-slate-500">Cabang: <strong>{networkConfig?.cabang_nama || "Toko Utama"}</strong></span>
+                  </div>
+                </div>
+
+                <div class="text-right">
+                  <div class="flex items-center gap-1.5 font-mono text-xs font-bold text-slate-800">
+                    <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span>IP: {networkConfig?.ip_address || "192.168.100.75"}:7890</span>
+                  </div>
+                  <span class="text-[10px] text-emerald-700 font-semibold">🟢 Aktif Mendengarkan di Wi-Fi</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Sub-Card B: DAFTAR PERANGKAT LAIN DI WI-FI -->
+            <div class="space-y-2">
+              <div class="text-xs font-bold text-slate-700 flex items-center justify-between">
+                <span>Komputer Lain yang Terdeteksi di Wi-Fi:</span>
+                <span class="text-[11px] text-slate-500">{discoveredDevices.length} perangkat ditemukan</span>
+              </div>
+
+              {#if discoveredDevices.length > 0}
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {#each discoveredDevices as dev}
+                    <div class="p-3.5 bg-white rounded-xl border border-slate-200 shadow-2xs space-y-2 hover:border-slate-300 transition-all">
+                      <div class="flex items-center justify-between text-xs">
+                        <div class="flex items-center gap-2">
+                          <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                          <span class="font-bold text-slate-900">{dev.device_nama}</span>
+                        </div>
+                        <span class="px-2 py-0.2 rounded text-[9px] font-bold uppercase {dev.role === 'server' ? 'bg-primary/10 text-primary border border-primary/20' : 'bg-blue-100 text-blue-800'}">
+                          {dev.role === 'server' ? '🏢 SERVER PUSAT' : '💻 KASIR CLIENT'}
+                        </span>
+                      </div>
+
+                      <div class="text-[11px] text-slate-500 font-mono flex items-center justify-between">
+                        <span>IP: {dev.ip_address}:{dev.port}</span>
+                        <span>{dev.cabang_nama || "Cabang"}</span>
+                      </div>
+
+                      <!-- Tombol Aksi Cepat Per Perangkat -->
+                      <div class="pt-2 border-t border-slate-100 flex items-center justify-end gap-2">
+                        <button
+                          type="button"
+                          onclick={() => handlePingLan(dev)}
+                          class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[11px] font-semibold cursor-pointer border border-slate-300"
+                        >
+                          Ping Tes
+                        </button>
+
+                        {#if tokoMode === "cabang" && dev.role === "server"}
+                          <button
+                            type="button"
+                            onclick={() => handleHubungkanDanTarik(dev.ip_address, dev.port)}
+                            class="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-bold cursor-pointer border-none shadow-2xs flex items-center gap-1"
+                          >
+                            <span class="material-symbols-outlined text-[14px]">link</span>
+                            <span>Sambung &amp; Tarik Data</span>
+                          </button>
+                        {:else if tokoMode === "cabang"}
+                          <button
+                            type="button"
+                            onclick={() => handleGabungServer(dev)}
+                            class="px-2.5 py-1 bg-primary hover:bg-primary-dark text-white rounded-lg text-[11px] font-bold cursor-pointer border-none shadow-2xs"
+                          >
+                            Hubungkan
+                          </button>
+                        {/if}
+                      </div>
+                    </div>
+                  {/each}
+                </div>
+              {:else}
+                <!-- Radar Belum Menemukan Perangkat Lain -->
+                <div class="p-4 bg-slate-50/80 rounded-xl border border-dashed border-slate-300 text-center space-y-3">
+                  <div class="flex justify-center">
+                    <div class="w-12 h-12 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center animate-pulse">
+                      <span class="material-symbols-outlined text-[24px]">sensors_off</span>
+                    </div>
+                  </div>
+                  <div class="space-y-1">
+                    <h5 class="font-bold text-slate-800 text-xs">Belum Ada Komputer Lain yang Terdeteksi Otomatis</h5>
+                    <p class="text-[11px] text-slate-500 max-w-md mx-auto leading-relaxed">
+                      Sistem mendengarkan siaran Wi-Fi. Jika laptop kedua belum muncul (bisa karena router membatasi broadcast / firewall), Anda dapat <strong>menyambungkannya langsung menggunakan nomor IP</strong>:
+                    </p>
+                  </div>
+
+                  <div class="flex flex-col sm:flex-row items-center justify-center gap-2 max-w-md mx-auto pt-1">
+                    <input
+                      type="text"
+                      bind:value={manualServerIp}
+                      placeholder="Masukkan IP Laptop (misal 192.168.100.75)"
+                      class="w-full sm:w-64 px-3 py-1.5 border border-slate-300 rounded-lg text-xs font-mono bg-white outline-hidden text-center sm:text-left"
+                    />
+                    <button
+                      type="button"
+                      onclick={() => handleManualConnect()}
+                      disabled={isConnectingManual || !manualServerIp.trim()}
+                      class="w-full sm:w-auto px-4 py-1.5 bg-primary hover:bg-primary-dark disabled:opacity-50 text-white rounded-lg text-xs font-bold cursor-pointer border-none shadow-xs shrink-0 flex items-center justify-center gap-1"
+                    >
+                      <span class="material-symbols-outlined text-[14px]">link</span>
+                      <span>Sambung Manual</span>
+                    </button>
+                  </div>
+                </div>
+              {/if}
+            </div>
+          </div>
+
+          <!-- 6. KONTEN KHUSUS MODE TOKO PUSAT -->
           {#if tokoMode === "pusat"}
             <!-- Kartu 1: Daftar Cabang (Hanya Pusat yang menambah cabang) -->
             <div class="p-4 bg-white border border-slate-200 rounded-2xl shadow-2xs space-y-3">
@@ -2080,54 +2538,8 @@
               </div>
             </div>
 
-            <!-- Kartu 3: Jaringan Wi-Fi Toko (Satu Gedung) -->
-            <div class="p-4 bg-white border border-slate-200 rounded-2xl shadow-2xs space-y-3">
-              <div class="flex items-center justify-between">
-                <div>
-                  <div class="font-bold text-slate-900 text-xs flex items-center gap-2">
-                    <span class="material-symbols-outlined text-primary text-[18px]">wifi</span>
-                    <span>Jaringan Wi-Fi Toko (Satu Gedung)</span>
-                  </div>
-                  <p class="text-[11px] text-slate-500 mt-0.5">
-                    Kasir cabang di ruangan/gedung yang sama dapat terhubung langsung ke komputer Server ini.
-                  </p>
-                </div>
-                <div class="px-2.5 py-1 rounded-lg bg-slate-100 border border-slate-200 font-mono text-xs font-bold text-slate-800">
-                  IP Server Ini: {networkConfig?.ip_address || "192.168.100.75"}:7890
-                </div>
-              </div>
-
-              {#if discoveredDevices.length > 0}
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-slate-100">
-                  {#each discoveredDevices as dev}
-                    <div class="p-2.5 bg-slate-50 rounded-lg border border-slate-200 text-xs flex items-center justify-between">
-                      <div class="flex items-center gap-2">
-                        <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
-                        <span class="font-bold text-slate-800">{dev.device_nama}</span>
-                        <span class="text-slate-400 font-mono text-[10px]">({dev.ip_address})</span>
-                      </div>
-                      <span class="px-1.5 py-0.2 rounded text-[9px] font-bold bg-blue-100 text-blue-800 uppercase">
-                        {dev.role}
-                      </span>
-                    </div>
-                  {/each}
-                </div>
-              {/if}
-            </div>
-
-          <!-- TAMPILAN JIKA MODE TOKO CABANG -->
+          <!-- 7. KONTEN KHUSUS MODE TOKO CABANG -->
           {:else}
-            <!-- Banner Penjelasan Toko Cabang -->
-            <div class="p-4 bg-emerald-50/80 border border-emerald-200 rounded-2xl flex items-start gap-3 shadow-2xs">
-              <span class="material-symbols-outlined text-[24px] text-emerald-700 shrink-0 mt-0.5">verified_user</span>
-              <div class="space-y-1 text-xs text-emerald-950">
-                <div class="font-bold text-emerald-900 text-sm">Mode Toko Cabang Aktif</div>
-                <p class="text-emerald-800 text-[11px] leading-relaxed">
-                  Komputer ini menggunakan <strong>database master dari Toko Pusat</strong>. Semua katalog produk, kategori, dan harga diatur terpusat agar tidak campur aduk. Toko Cabang tidak bisa membuat cabang baru, melainkan hanya bertugas menerima data dan bertransaksi.
-                </p>
-              </div>
-            </div>
-
             <!-- Langkah 1: Pilih Identitas Cabang Ini -->
             <div class="p-4 bg-white border border-slate-200 rounded-2xl shadow-2xs space-y-3">
               <div class="flex items-center justify-between">
@@ -2216,30 +2628,48 @@
               </div>
 
               {#if cabangSyncTab === "wifi"}
-                <div class="p-3 bg-slate-50 rounded-xl space-y-3 text-xs">
-                  <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                    <div class="space-y-1">
-                      <span class="font-bold text-slate-700">Alamat IP Komputer Server Pusat:</span>
-                      <input
-                        type="text"
-                        bind:value={manualServerIp}
-                        placeholder="Contoh: 192.168.100.75"
-                        class="w-full sm:w-64 px-3 py-1.5 border border-slate-300 rounded-lg text-xs font-mono bg-white outline-hidden"
-                      />
+                <div class="p-3.5 bg-slate-50 rounded-xl space-y-3 text-xs">
+                  <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-3">
+                    <div class="space-y-1.5 flex-1">
+                      <div class="flex items-center justify-between">
+                        <span class="font-bold text-slate-700">Alamat IP Komputer Server Pusat:</span>
+                        {#if serverConnectionStatus.checked}
+                          <span class="text-[10px] font-bold {serverConnectionStatus.online ? 'text-emerald-700' : 'text-rose-600'}">
+                            {serverConnectionStatus.online ? `🟢 Sinyal Terhubung (${serverConnectionStatus.latency_ms}ms)` : '🔴 Tidak Merespons'}
+                          </span>
+                        {/if}
+                      </div>
+                      <div class="flex items-center gap-2">
+                        <input
+                          type="text"
+                          bind:value={manualServerIp}
+                          placeholder="Contoh: 192.168.100.75"
+                          class="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-xs font-mono bg-white outline-hidden"
+                        />
+                        <button
+                          type="button"
+                          onclick={() => checkServerConnection(manualServerIp)}
+                          disabled={serverConnectionStatus.checking}
+                          class="px-3 py-2 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold rounded-lg text-xs cursor-pointer border border-slate-300 flex items-center gap-1 shrink-0"
+                        >
+                          <span class="material-symbols-outlined text-[15px] {serverConnectionStatus.checking ? 'animate-spin' : ''}">sensors</span>
+                          <span>Tes Sinyal</span>
+                        </button>
+                      </div>
                     </div>
 
                     <button
                       type="button"
-                      onclick={() => handleTarikMasterLan(manualServerIp)}
-                      disabled={isPullingMaster}
-                      class="px-4 py-2 bg-primary hover:bg-primary-dark disabled:opacity-50 text-white rounded-lg font-bold text-xs cursor-pointer border-none shadow-xs flex items-center gap-1.5 self-start sm:self-end"
+                      onclick={() => handleHubungkanDanTarik(manualServerIp)}
+                      disabled={isPullingMaster || !manualServerIp.trim()}
+                      class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg font-bold text-xs cursor-pointer border-none shadow-xs flex items-center gap-1.5 shrink-0 self-stretch sm:self-auto justify-center"
                     >
                       {#if isPullingMaster}
                         <span class="material-symbols-outlined text-[16px] animate-spin">progress_activity</span>
                         <span>Menarik Data...</span>
                       {:else}
                         <span class="material-symbols-outlined text-[16px]">download</span>
-                        <span>Tarik Data via Wi-Fi</span>
+                        <span>Sambung &amp; Tarik Data via Wi-Fi</span>
                       {/if}
                     </button>
                   </div>

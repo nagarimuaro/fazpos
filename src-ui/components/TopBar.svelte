@@ -349,13 +349,20 @@
       </div>
     {/if}
 
-    <!-- Indikator LAN Discovery -->
-    {#if lanDeviceCount > 0}
-      <div class="hidden sm:flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-950/60 border border-emerald-500/30 text-emerald-300 text-[10px]" title="{lanDeviceCount} perangkat kasir terdeteksi di LAN">
-        <span class="material-symbols-outlined text-[13px] text-emerald-400">sensors</span>
-        <span>LAN: {lanDeviceCount}</span>
-      </div>
-    {/if}
+    <!-- Indikator LAN Discovery & Jaringan Multi-Device -->
+    <button
+      type="button"
+      onclick={() => onNavigate?.("pengaturan")}
+      class="hidden sm:flex items-center gap-1.5 px-2 py-0.5 rounded-lg border text-[10px] font-semibold cursor-pointer transition-all shadow-2xs shrink-0 {lanDeviceCount > 0
+        ? 'bg-emerald-950/70 border-emerald-500/40 text-emerald-300 hover:bg-emerald-900/80'
+        : 'bg-slate-800/80 border-slate-700 text-slate-400 hover:text-slate-200 hover:bg-slate-700'}"
+      title="Status Jaringan Multi-Device (Klik untuk buka Pengaturan Jaringan)"
+    >
+      <span class="material-symbols-outlined text-[13px] {lanDeviceCount > 0 ? 'text-emerald-400' : 'text-slate-400'}">
+        {lanDeviceCount > 0 ? 'sensors' : 'wifi_find'}
+      </span>
+      <span>{lanDeviceCount > 0 ? `LAN: ${lanDeviceCount} Online` : 'LAN: Standby'}</span>
+    </button>
 
     <!-- Tombol Aktivasi Lisensi: Menampilkan Status Real-Time -->
     <button

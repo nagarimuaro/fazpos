@@ -2172,27 +2172,25 @@ fn main() {
         .plugin(tauri_plugin_opener::init())
         .manage(state)
         .setup(move |_app| {
-            // 1. Jalankan Axum LAN HTTP Server jika role = 'server'
-            if setup_role == "server" {
-                let lan_db = Arc::clone(&setup_db);
-                let lan_cabang = setup_cabang.clone();
-                let lan_device = setup_device.clone();
-                tauri::async_runtime::spawn(async move {
-                    let lan_state = LanServerState {
-                        cabang_id: lan_cabang,
-                        device_id: lan_device,
-                        db: lan_db,
-                    };
-                    let router = buat_lan_router(lan_state);
-                    match tokio::net::TcpListener::bind("0.0.0.0:7890").await {
-                        Ok(listener) => {
-                            println!("[FAZPOS LAN] Axum HTTP server berjalan di 0.0.0.0:7890");
-                            let _ = axum::serve(listener, router).await;
-                        }
-                        Err(e) => eprintln!("[FAZPOS LAN] Gagal bind port 7890: {}", e),
+            // 1. Jalankan Axum LAN HTTP Server (port 7890)
+            let lan_db = Arc::clone(&setup_db);
+            let lan_cabang = setup_cabang.clone();
+            let lan_device = setup_device.clone();
+            tauri::async_runtime::spawn(async move {
+                let lan_state = LanServerState {
+                    cabang_id: lan_cabang,
+                    device_id: lan_device,
+                    db: lan_db,
+                };
+                let router = buat_lan_router(lan_state);
+                match tokio::net::TcpListener::bind("0.0.0.0:7890").await {
+                    Ok(listener) => {
+                        println!("[FAZPOS LAN] Axum HTTP server berjalan di 0.0.0.0:7890");
+                        let _ = axum::serve(listener, router).await;
                     }
-                });
-            }
+                    Err(e) => eprintln!("[FAZPOS LAN] Port 7890 bind: {}", e),
+                }
+            });
 
             // 2. Jalankan UDP Broadcast Discovery
             let packet = DiscoveryPacket {
